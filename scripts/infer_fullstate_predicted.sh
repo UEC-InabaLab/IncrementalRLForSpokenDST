@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Incremental DST - Oracle Inference with vLLM + Evaluation
+# Full-State DST - Predicted-History Inference with vLLM + Evaluation
 #
-# Uses ground truth dialogue history for each turn.
+# Uses model's own predicted transcripts for subsequent turns (cascading).
+# Only transcript cascades; each turn outputs the full state independently.
 #
 # Usage:
-#   bash scripts/infer_oracle.sh
+#   bash scripts/infer_fullstate_predicted.sh
 # =============================================================================
 set -euo pipefail
 
@@ -13,13 +14,13 @@ set -euo pipefail
 # Model & Checkpoint
 # ---------------------------------------------------------------------------
 MODEL_PATH="${MODEL_PATH:-Qwen/Qwen2.5-Omni-7B}"
-ADAPTER="${ADAPTER:-output/grpo_incremental_dst/v9-20260215-160930/checkpoint-9956}"
+ADAPTER="${ADAPTER:-}"
 
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
-VAL_DATA="${VAL_DATA:-data/incremental_baseline_sft_test.jsonl}"
-OUTPUT_DIR="${OUTPUT_DIR:-output/vllm_inference_results/oracle}"
+VAL_DATA="${VAL_DATA:-data/fullstate_baseline_sft_test.jsonl}"
+OUTPUT_DIR="${OUTPUT_DIR:-output/fullstate_vllm_inference_results/predicted}"
 AUDIO_BASE_DIR="${AUDIO_BASE_DIR:-/shrdlu/users/higuchi/dst/audio_flamingo}"
 
 # ---------------------------------------------------------------------------
@@ -49,7 +50,7 @@ GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.9}"
 # Build args
 # ---------------------------------------------------------------------------
 INFER_ARGS=(
-    --mode oracle
+    --mode predicted
     --model "${MODEL_PATH}"
     --input "${VAL_DATA}"
     --output "${OUTPUT_DIR}/predictions.jsonl"
@@ -71,7 +72,7 @@ fi
 # ---------------------------------------------------------------------------
 # Run inference
 # ---------------------------------------------------------------------------
-echo "[INFO] Running vLLM inference (oracle mode)..."
+echo "[INFO] Running full-state vLLM inference (predicted-history mode)..."
 echo "  Model:      ${MODEL_PATH}"
 echo "  Adapter:    ${ADAPTER:-none}"
 echo "  Data:       ${VAL_DATA}"
@@ -82,13 +83,13 @@ echo "  GPUs:       ${CUDA_VISIBLE_DEVICES}"
 mkdir -p "${OUTPUT_DIR}" logs
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-LOG_FILE="logs/infer_oracle_${TIMESTAMP}.log"
+LOG_FILE="logs/infer_fullstate_predicted_${TIMESTAMP}.log"
 
 nohup bash -c '
-uv run python scripts/infer_vllm.py '"$(printf ' %q' "${INFER_ARGS[@]}")"'
+uv run python scripts/infer_fullstate_vllm.py '"$(printf ' %q' "${INFER_ARGS[@]}")"'
 echo "[INFO] Inference completed."
 echo "[INFO] Running evaluation..."
-uv run python scripts/eval.py \
+uv run python scripts/eval_fullstate.py \
     --input "'"${OUTPUT_DIR}"'/predictions.jsonl" \
     --output "'"${OUTPUT_DIR}"'/metrics.json"
 echo "[INFO] Done. Results in '"${OUTPUT_DIR}"'/"

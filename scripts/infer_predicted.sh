@@ -13,8 +13,8 @@ set -euo pipefail
 # Model & Checkpoint
 # ---------------------------------------------------------------------------
 MODEL_PATH="${MODEL_PATH:-Qwen/Qwen2.5-Omni-7B}"
-ADAPTER="${ADAPTER:-output/sft_incremental_dst/v6-20260212-172415/checkpoint-4800}"
-
+# ADAPTER="${ADAPTER:-output/sft_incremental_dst/v6-20260212-172415/checkpoint-4800}"
+ADAPTER="${ADAPTER:-output/grpo_incremental_dst/v8-20260213-162756/checkpoint-1200}"
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------

@@ -5,33 +5,28 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "vllm>=0.13.0",
     "accelerate>=1.12.0",
     "bitsandbytes>=0.49.0",
+    "datasets>=3.0.0",
     "deepspeed>=0.18.3",
     "flash-attn",
     "librosa>=0.11.0",
-    "peft>=0.18.0",
+    "peft>=0.11.0",
     "pydub>=0.25.1",
+    "torch>=2.9.0",
+    "torchaudio>=2.9.0",
+    "torchvision>=0.24.0",
     "wandb>=0.23.1",
-    "torch>=2.6.0,<2.7.0",
-    "torchaudio>=2.6.0,<2.7.0",
-    "torchvision>=0.21.0,<0.22.0",
-    "ms-swift==3.12.0",
-    "datasets>=3.6.0",
+    "qwen-vl-utils==0.0.14",
     "msgspec>=0.19.0",
+    "av<16.1.0",
     "soundfile>=0.13.0",
     "qwen-omni-utils",
-    "decord>=0.6.0"
+    "decord>=0.6.0",
+    "ms-swift>=3.12.4",
 ]
+
 
 [tool.uv.sources]
-# PyTorch 2.6 + CUDA 12.4 用の flash-attn (Python 3.12)
-flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp312-cp312-linux_x86_64.whl" }
-
-
-[tool.uv]
-override-dependencies = [
-    "torch @ https://download.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp312-cp312-linux_x86_64.whl",
-    "torchaudio @ https://download.pytorch.org/whl/cu124/torchaudio-2.6.0%2Bcu124-cp312-cp312-linux_x86_64.whl",
-    "torchvision @ https://download.pytorch.org/whl/cu124/torchvision-0.21.0%2Bcu124-cp312-cp312-linux_x86_64.whl",
-]
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.9cxx11abiTRUE-cp312-cp312-linux_x86_64.whl" }

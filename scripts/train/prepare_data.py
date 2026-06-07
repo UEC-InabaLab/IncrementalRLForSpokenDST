@@ -34,13 +34,13 @@ Each output sample corresponds to one (system, user) pair:
   - curr_state:   flatten(log[2k+3].metadata)   — state after user's reply
 
 Input to the model:
-  - Text: dialogue history including the current system prompt (log[0..2k+1])
-  - Audio: current user utterance only (log[2k+2])
+  - Text: dialogue history including the current system turn (log[0..2k+1])
+  - Audio: current user turn only
 
-Audio files must be pre-split with split_audio.py. Each sample references:
-  audios: ["{dialogue_id}/turn_{2k+2}.wav"]
+Audio files must be pre-extracted with split_audio.py. Each sample references:
+  audios: ["{dialogue_id}_{sys_idx}_{user_idx}.wav"]  (named with both indices for identification)
 
-At inference, set --audio-base-dir to the split audio output directory.
+At inference, set --audio-base-dir to the audio output directory.
 
 Usage:
   # 1. Split audio first (see split_audio.py)
@@ -118,9 +118,10 @@ def build_user_message(history_lines: list[str], prev_state: dict) -> str:
 
     Format:
         [Dialogue History]        (omitted when empty)
-        System: ...
         User: ...
-        System: ...   ← includes current system prompt
+        System: ...
+        ...
+        System: ...   ← includes current system turn
 
         [Previous State]
         {"domain": {"slot": "value"}}
@@ -141,11 +142,12 @@ def build_user_message(history_lines: list[str], prev_state: dict) -> str:
     return "\n".join(parts)
 
 
-def build_solution(user_text: str, prev: dict, curr: dict) -> str:
+def build_solution(sys_text: str, user_text: str, prev: dict, curr: dict) -> str:
     """Build gold solution string."""
     ops = compute_diff_ops(prev, curr)
     answer = "\n".join(ops)
-    return f"<transcript>\n{user_text}\n</transcript>\n<answer>{answer}</answer>"
+    transcript = f"System: {sys_text}\nUser: {user_text}"
+    return f"<transcript>\n{transcript}\n</transcript>\n<answer>{answer}</answer>"
 
 
 def process_dialogue(
@@ -192,7 +194,7 @@ def process_dialogue(
         else:
             curr_state = prev_state  # last pair: no further annotation
 
-        # Current system turn goes into history (text); only user audio is provided
+        # History includes current system turn (text); audio is user turn only
         history_with_sys = list(history_lines) + [f"System: {sys_text}"]
 
         samples.append({
@@ -200,8 +202,8 @@ def process_dialogue(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": build_user_message(history_with_sys, prev_state)},
             ],
-            "audios": [f"{dialogue_id}/turn_{user_idx}.wav"],
-            "solution": build_solution(user_text, prev_state, curr_state),
+            "audios": [f"{dialogue_id}_{sys_idx}_{user_idx}.wav"],
+            "solution": build_solution(sys_text, user_text, prev_state, curr_state),
             "belief_state": json.dumps(curr_state, ensure_ascii=False),
             "prev_belief_state": json.dumps(prev_state, ensure_ascii=False),
             "dialogue_id": dialogue_id,

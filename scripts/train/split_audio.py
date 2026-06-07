@@ -1,8 +1,8 @@
-"""Split per-dialogue audio files into per-turn WAV segments.
+"""Extract per-sample user-turn audio from per-dialogue WAV files.
 
 SpokenWOZ provides one WAV file per dialogue. Each turn in the JSON log has
 word-level timing (BeginTime / EndTime in milliseconds). This script extracts
-each turn's audio segment and saves it as an individual file.
+the user turn audio for each (system, user) sample pair.
 
 Expected input structure:
   <audio-dir>/
@@ -12,12 +12,9 @@ Expected input structure:
 
 Output structure:
   <output-dir>/
-    MUL0001/
-      turn_0.wav   # log[0]
-      turn_1.wav   # log[1]
-      ...
-    MUL0002/
-      ...
+    MUL0001_1_2.wav   # sample k=0: sys=log[1], user=log[2]
+    MUL0001_3_4.wav   # sample k=1: sys=log[3], user=log[4]
+    ...
 
 Usage:
   python scripts/train/split_audio.py \\
@@ -35,34 +32,48 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
 import soundfile as sf
 
 
-PADDING_MS = 100  # silence padding added before/after each turn
+PADDING_MS = 100  # silence padding added before/after each user turn
 
 
-def split_dialogue(
+def extract_samples(
     dialogue_id: str,
     log: list[dict],
     audio_path: Path,
     output_dir: Path,
 ) -> int:
-    """Extract per-turn audio segments for one dialogue.
+    """Extract per-sample user-turn audio for one dialogue.
 
-    Returns the number of turns successfully saved.
+    Pairs: (log[2k+1]=system, log[2k+2]=user) for k = 0, 1, ...
+    Output file: {dialogue_id}_{sys_idx}_{user_idx}.wav  (user audio only)
+
+    Returns the number of samples successfully saved.
     """
     audio, sr = sf.read(str(audio_path), always_2d=False)
     total_samples = len(audio) if audio.ndim == 1 else audio.shape[0]
 
-    out_dialogue_dir = output_dir / dialogue_id
-    out_dialogue_dir.mkdir(parents=True, exist_ok=True)
-
     saved = 0
-    for turn_idx, turn in enumerate(log):
-        words = turn.get("words", [])
+    k = 0
+    while True:
+        sys_idx = 2 * k + 1
+        user_idx = 2 * k + 2
+
+        if user_idx >= len(log):
+            break
+
+        sys_turn = log[sys_idx]
+        user_turn = log[user_idx]
+
+        if sys_turn.get("tag") != "system" or user_turn.get("tag") != "user":
+            k += 1
+            continue
+
+        words = user_turn.get("words", [])
         if not words:
-            print(f"  [WARN] {dialogue_id}/turn_{turn_idx}: no word timing, skipping")
+            print(f"  [WARN] {dialogue_id} user turn {user_idx}: no word timing, skipping")
+            k += 1
             continue
 
         begin_ms = max(0, words[0]["BeginTime"] - PADDING_MS)
@@ -72,23 +83,25 @@ def split_dialogue(
         end_sample = min(total_samples, int(end_ms * sr / 1000))
 
         if begin_sample >= end_sample:
-            print(f"  [WARN] {dialogue_id}/turn_{turn_idx}: empty segment, skipping")
+            print(f"  [WARN] {dialogue_id} user turn {user_idx}: empty segment, skipping")
+            k += 1
             continue
 
         segment = audio[begin_sample:end_sample]
-        out_path = out_dialogue_dir / f"turn_{turn_idx}.wav"
+        out_path = output_dir / f"{dialogue_id}_{sys_idx}_{user_idx}.wav"
         sf.write(str(out_path), segment, sr)
         saved += 1
+        k += 1
 
     return saved
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data",        required=True, help="SpokenWOZ JSON file")
-    parser.add_argument("--audio-dir",   required=True, help="Directory with per-dialogue WAV files")
-    parser.add_argument("--output-dir",  required=True, help="Output directory for per-turn WAV files")
-    parser.add_argument("--ext",         default="wav",  help="Audio file extension (default: wav)")
+    parser.add_argument("--data", required=True, help="SpokenWOZ JSON file")
+    parser.add_argument("--audio-dir", required=True, help="Directory with per-dialogue WAV files")
+    parser.add_argument("--output-dir", required=True, help="Output directory for per-sample WAV files")
+    parser.add_argument("--ext", default="wav", help="Audio file extension (default: wav)")
     args = parser.parse_args()
 
     audio_dir = Path(args.audio_dir)
@@ -98,7 +111,7 @@ def main() -> None:
     with open(args.data, encoding="utf-8") as f:
         data: dict = json.load(f)
 
-    total_turns = 0
+    total_saved = 0
     skipped_dialogues = 0
 
     for dialogue_id, dialogue in data.items():
@@ -110,10 +123,10 @@ def main() -> None:
             skipped_dialogues += 1
             continue
 
-        saved = split_dialogue(dialogue_id, log, audio_path, output_dir)
-        total_turns += saved
+        saved = extract_samples(dialogue_id, log, audio_path, output_dir)
+        total_saved += saved
 
-    print(f"\nDone. {total_turns} turn files written to {output_dir}/")
+    print(f"\nDone. {total_saved} sample files written to {output_dir}/")
     if skipped_dialogues:
         print(f"Skipped {skipped_dialogues} dialogues (audio file not found)")
 

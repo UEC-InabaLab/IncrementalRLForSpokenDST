@@ -12,24 +12,23 @@ Writes predictions JSONL compatible with eval.py.
 
 Usage:
   # Oracle mode (default):
-  python scripts/infer_vllm.py \
+  python scripts/infer/infer.py \
       --model Qwen/Qwen2.5-Omni-7B \
-      --input data/incremental_baseline_sft_test.jsonl \
-      --output output/vllm_predictions.jsonl
+      --input data/test.jsonl \
+      --output output/predictions.jsonl
 
   # Predicted history mode:
-  python scripts/infer_vllm.py \
+  python scripts/infer/infer.py \
       --mode predicted \
       --model Qwen/Qwen2.5-Omni-7B \
-      --input data/incremental_baseline_sft_test.jsonl \
-      --output output/vllm_predictions.jsonl
+      --input data/test.jsonl \
+      --output output/predictions.jsonl
 """
 
 import argparse
 import json
 import os
 import re
-import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional
@@ -38,7 +37,7 @@ from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
 
 # ---------------------------------------------------------------------------
-# Parsing helpers (duplicated from dapo_reward.py to avoid import issues)
+# Parsing helpers (duplicated from reward.py to avoid import issues)
 # ---------------------------------------------------------------------------
 
 _OP_PATTERN = re.compile(r"(set|update|delete)\(([^)]+)\)")

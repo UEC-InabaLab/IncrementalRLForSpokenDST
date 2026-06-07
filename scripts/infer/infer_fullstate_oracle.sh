@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Incremental DST - Inference with vLLM + Evaluation
+# Full-State DST - Oracle Inference with vLLM + Evaluation
 #
-# Modes:
-#   oracle    - Use ground truth dialogue history (default)
-#   predicted - Use model's own predicted history (cascading)
+# Uses ground truth dialogue history for each turn.
 #
 # Usage:
-#   bash scripts/infer_vllm.sh                        # oracle mode
-#   INFER_MODE=predicted bash scripts/infer_vllm.sh   # predicted mode
+#   bash scripts/infer/infer_fullstate_oracle.sh
 # =============================================================================
 set -euo pipefail
 
@@ -16,14 +13,13 @@ set -euo pipefail
 # Model & Checkpoint
 # ---------------------------------------------------------------------------
 MODEL_PATH="${MODEL_PATH:-Qwen/Qwen2.5-Omni-7B}"
-ADAPTER="${ADAPTER:-output/sft_incremental_dst/v6-20260212-172415/checkpoint-4800}"
+ADAPTER="${ADAPTER:-}"
 
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
-INFER_MODE="${INFER_MODE:-oracle}"  # oracle or predicted
-VAL_DATA="${VAL_DATA:-data/incremental_baseline_sft_test.jsonl}"
-OUTPUT_DIR="${OUTPUT_DIR:-output/vllm_inference_results/${INFER_MODE}}"
+VAL_DATA="${VAL_DATA:-data/fullstate_test.jsonl}"
+OUTPUT_DIR="${OUTPUT_DIR:-output/fullstate_vllm_inference_results/oracle}"
 AUDIO_BASE_DIR="${AUDIO_BASE_DIR:-/shrdlu/users/higuchi/dst/audio_flamingo}"
 
 # ---------------------------------------------------------------------------
@@ -31,14 +27,11 @@ AUDIO_BASE_DIR="${AUDIO_BASE_DIR:-/shrdlu/users/higuchi/dst/audio_flamingo}"
 # ---------------------------------------------------------------------------
 TENSOR_PARALLEL_SIZE="${TENSOR_PARALLEL_SIZE:-1}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-
-# Fix vLLM multiproc worker CUDA init failure (fork -> spawn)
 export VLLM_WORKER_MULTIPROC_METHOD="${VLLM_WORKER_MULTIPROC_METHOD:-spawn}"
 
 # Verify GPU availability
 if ! nvidia-smi &>/dev/null; then
     echo "[ERROR] nvidia-smi failed. No GPU available on this node." >&2
-    echo "[ERROR] Please run on a GPU node." >&2
     exit 1
 fi
 echo "[INFO] GPU check passed:"
@@ -56,7 +49,7 @@ GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.9}"
 # Build args
 # ---------------------------------------------------------------------------
 INFER_ARGS=(
-    --mode "${INFER_MODE}"
+    --mode oracle
     --model "${MODEL_PATH}"
     --input "${VAL_DATA}"
     --output "${OUTPUT_DIR}/predictions.jsonl"
@@ -78,8 +71,7 @@ fi
 # ---------------------------------------------------------------------------
 # Run inference
 # ---------------------------------------------------------------------------
-echo "[INFO] Running vLLM inference..."
-echo "  Mode:       ${INFER_MODE}"
+echo "[INFO] Running full-state vLLM inference (oracle mode)..."
 echo "  Model:      ${MODEL_PATH}"
 echo "  Adapter:    ${ADAPTER:-none}"
 echo "  Data:       ${VAL_DATA}"
@@ -90,13 +82,13 @@ echo "  GPUs:       ${CUDA_VISIBLE_DEVICES}"
 mkdir -p "${OUTPUT_DIR}" logs
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-LOG_FILE="logs/infer_vllm_${INFER_MODE}_${TIMESTAMP}.log"
+LOG_FILE="logs/infer_fullstate_oracle_${TIMESTAMP}.log"
 
 nohup bash -c '
-uv run python scripts/infer_vllm.py '"$(printf ' %q' "${INFER_ARGS[@]}")"'
+uv run python scripts/infer/infer_fullstate.py '"$(printf ' %q' "${INFER_ARGS[@]}")"'
 echo "[INFO] Inference completed."
 echo "[INFO] Running evaluation..."
-uv run python scripts/eval.py \
+uv run python scripts/eval/eval_fullstate.py \
     --input "'"${OUTPUT_DIR}"'/predictions.jsonl" \
     --output "'"${OUTPUT_DIR}"'/metrics.json"
 echo "[INFO] Done. Results in '"${OUTPUT_DIR}"'/"

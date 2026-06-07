@@ -71,22 +71,31 @@ def apply_diff_ops(state: Dict, ops: list) -> Dict:
     return new_state
 
 
+def _looks_like_json(text: str) -> bool:
+    stripped = text.strip()
+    return stripped.startswith('{') or stripped.startswith('[')
+
+
 def get_pred_state(record: dict) -> dict:
     prediction = record['prediction']
     pred_answer = extract_answer(prediction)
-    if 'input_belief_state' in record:
-        input_state_str = record.get('input_belief_state', '{}')
+
+    input_state_str = record.get('input_belief_state') or record.get('prev_belief_state')
+    is_incremental = (
+        input_state_str is not None
+        and pred_answer is not None
+        and not _looks_like_json(pred_answer)
+    )
+
+    if is_incremental:
         try:
             input_state = json.loads(input_state_str)
             if not isinstance(input_state, dict):
                 input_state = {}
         except (json.JSONDecodeError, TypeError):
             input_state = {}
-        if pred_answer is not None:
-            ops = parse_diff_ops(pred_answer)
-            return apply_diff_ops(input_state, ops)
-        else:
-            return input_state
+        ops = parse_diff_ops(pred_answer)
+        return apply_diff_ops(input_state, ops)
     else:
         if pred_answer is not None:
             try:
@@ -242,7 +251,7 @@ def main():
     # ==================================================================
     # Figure B: Binned JGA bar chart
     # ==================================================================
-    fig_b, ax_b = plt.subplots(figsize=(8, 5))
+    fig_b, ax_b = plt.subplots(figsize=(8, 4.2))
     n_models = len(all_data)
     bar_width = 0.8 / n_models
     bin_labels_ref = None
@@ -264,13 +273,13 @@ def main():
             print(f"  {bl:>8} {j:>8.4f} {n:>6}")
 
     ax_b.set_xticks(range(len(bin_labels_ref)))
-    ax_b.set_xticklabels(bin_labels_ref, fontsize=11)
-    ax_b.set_xlabel('Turn Range', fontsize=13)
-    ax_b.set_ylabel('JGA', fontsize=13)
-    ax_b.legend(fontsize=11, loc='upper right')
+    ax_b.set_xticklabels(bin_labels_ref, fontsize=15)
+    ax_b.set_xlabel('Turn Range', fontsize=17)
+    ax_b.set_ylabel('JGA', fontsize=17)
+    ax_b.legend(fontsize=14, loc='upper right')
     ax_b.grid(True, alpha=0.3, axis='y')
     ax_b.set_ylim(0, 1.0)
-    ax_b.tick_params(axis='y', labelsize=11)
+    ax_b.tick_params(axis='y', labelsize=15)
     for spine in ax_b.spines.values():
         spine.set_visible(False)
 

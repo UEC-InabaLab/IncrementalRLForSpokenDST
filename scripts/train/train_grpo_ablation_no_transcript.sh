@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Full-State DST - GRPO Training with ms-swift
+# Ablation: Incremental DST - GRPO Training WITHOUT transcript reward
 # Model: Qwen2.5-Omni-7B (optionally starting from SFT checkpoint)
+# Reward: diff_f1 + exact_match + format (no transcript WER)
 # =============================================================================
 set -euo pipefail
 
@@ -9,19 +10,18 @@ set -euo pipefail
 # Configuration (override via environment variables)
 # ---------------------------------------------------------------------------
 MODEL_PATH="${MODEL_PATH:-Qwen/Qwen2.5-Omni-7B}"
-# Set SFT_CHECKPOINT to use a LoRA checkpoint as the starting point
-SFT_CHECKPOINT="${SFT_CHECKPOINT:-}"
+SFT_CHECKPOINT="${SFT_CHECKPOINT:-output/sft_incremental_dst/v6-20260212-172415/checkpoint-4800}"
 
-TRAIN_DATA="${TRAIN_DATA:-data/fullstate_dapo_train.jsonl}"
-VAL_DATA_FULL="${VAL_DATA_FULL:-data/fullstate_dapo_val.jsonl}"
-VAL_DATA="${VAL_DATA:-data/fullstate_dapo_val_small.jsonl}"
+TRAIN_DATA="${TRAIN_DATA:-data/train.jsonl}"
+VAL_DATA_FULL="${VAL_DATA_FULL:-data/val.jsonl}"
+VAL_DATA="${VAL_DATA:-data/val_small.jsonl}"
 VAL_SAMPLE_N="${VAL_SAMPLE_N:-50}"
-OUTPUT_DIR="${OUTPUT_DIR:-output/grpo_fullstate_dst}"
-PLUGIN_PATH="${PLUGIN_PATH:-src/swift_plugin/dapo_reward.py}"
+OUTPUT_DIR="${OUTPUT_DIR:-output/grpo_incremental_dst_no_transcript}"
+PLUGIN_PATH="${PLUGIN_PATH:-src/reward.py}"
 
-NUM_TRAIN_GPUS="${NUM_TRAIN_GPUS:-8}"
+NUM_TRAIN_GPUS="${NUM_TRAIN_GPUS:-6}"
 NUM_INFER_GPUS="${NUM_INFER_GPUS:-2}"
-TOTAL_GPUS="${TOTAL_GPUS:-8}"
+TOTAL_GPUS="${TOTAL_GPUS:-6}"
 BATCH_SIZE="${BATCH_SIZE:-2}"
 GRAD_ACCUM="${GRAD_ACCUM:-8}"
 LEARNING_RATE="${LEARNING_RATE:-1e-6}"
@@ -29,11 +29,11 @@ NUM_EPOCHS="${NUM_EPOCHS:-1}"
 LORA_RANK="${LORA_RANK:-64}"
 LORA_ALPHA="${LORA_ALPHA:-128}"
 MAX_COMPLETION_LENGTH="${MAX_COMPLETION_LENGTH:-1024}"
-NUM_GENERATIONS="${NUM_GENERATIONS:-8}"
+NUM_GENERATIONS="${NUM_GENERATIONS:-6}"
 TEMPERATURE="${TEMPERATURE:-1.0}"
 BETA="${BETA:-0.02}"
 NUM_ITERATIONS="${NUM_ITERATIONS:-2}"
-WANDB_PROJECT="${WANDB_PROJECT:-qwenomni-grpo-fullstate}"
+WANDB_PROJECT="${WANDB_PROJECT:-qwenomni-grpo}"
 RESUME_CHECKPOINT="${RESUME_CHECKPOINT:-}"
 
 # ---------------------------------------------------------------------------
@@ -41,30 +41,14 @@ RESUME_CHECKPOINT="${RESUME_CHECKPOINT:-}"
 # ---------------------------------------------------------------------------
 mkdir -p logs
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-LOG_FILE="logs/grpo_fullstate_${TIMESTAMP}.log"
+LOG_FILE="logs/grpo_no_transcript_${TIMESTAMP}.log"
 
 # ---------------------------------------------------------------------------
-# Prepare data if needed
+# Prepare small val dataset
 # ---------------------------------------------------------------------------
-if [ ! -f "${TRAIN_DATA}" ]; then
-    echo "[INFO] Converting training data to full-state GRPO format..."
-    uv run python scripts/prepare_fullstate_data.py \
-        --input data/dapo_train.jsonl \
-        --output "${TRAIN_DATA}" \
-        --format grpo
-fi
-
-if [ ! -f "${VAL_DATA_FULL}" ]; then
-    echo "[INFO] Converting validation data to full-state GRPO format..."
-    uv run python scripts/prepare_fullstate_data.py \
-        --input data/dapo_val.jsonl \
-        --output "${VAL_DATA_FULL}" \
-        --format grpo
-fi
-
 if [ ! -f "${VAL_DATA}" ]; then
     echo "[INFO] Sampling ${VAL_SAMPLE_N} val examples from ${VAL_DATA_FULL}..."
-    uv run python scripts/sample_val.py \
+    uv run python scripts/train/sample_val.py \
         --input "${VAL_DATA_FULL}" --output "${VAL_DATA}" --n "${VAL_SAMPLE_N}"
 fi
 
@@ -80,14 +64,14 @@ elif [ -n "${SFT_CHECKPOINT}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Run GRPO
+# Run GRPO (ablation: no transcript reward)
 # ---------------------------------------------------------------------------
 export WANDB_PROJECT
-echo "[INFO] Starting full-state GRPO training..."
+echo "[INFO] Starting GRPO training (ablation: no transcript reward)..."
 echo "  Model:        ${MODEL_PATH}"
 echo "  Train data:   ${TRAIN_DATA}"
 echo "  Plugin:       ${PLUGIN_PATH}"
-echo "  Reward:       dst_fullstate"
+echo "  Reward:       dst_incremental_no_transcript"
 echo "  Output:       ${OUTPUT_DIR}"
 echo "  Train GPUs:   ${NUM_TRAIN_GPUS}"
 echo "  Generations:  ${NUM_GENERATIONS}"
@@ -109,7 +93,7 @@ nohup uv run torchrun --nproc_per_node=${NUM_TRAIN_GPUS} \
     --dataset "${TRAIN_DATA}" \
     --val_dataset "${VAL_DATA}" \
     --external_plugins "${PLUGIN_PATH}" \
-    --reward_funcs dst_fullstate \
+    --reward_funcs dst_incremental_no_transcript \
     --reward_weights 1.0 \
     --num_generations ${NUM_GENERATIONS} \
     --max_completion_length ${MAX_COMPLETION_LENGTH} \
@@ -140,5 +124,5 @@ nohup uv run torchrun --nproc_per_node=${NUM_TRAIN_GPUS} \
     ${RESUME_CHECKPOINT:+--resume_from_checkpoint "${RESUME_CHECKPOINT}"} \
     > "${LOG_FILE}" 2>&1 &
 
-echo "[INFO] Full-state GRPO training started in background (PID: $!)"
+echo "[INFO] GRPO training started in background (PID: $!)"
 echo "[INFO] Log: tail -f ${LOG_FILE}"

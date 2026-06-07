@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Full-State DST - SFT Training with ms-swift
+# Incremental DST - SFT Training with ms-swift
 # Model: Qwen2.5-Omni-7B
 # =============================================================================
 set -euo pipefail
@@ -9,9 +9,9 @@ set -euo pipefail
 # Configuration (override via environment variables)
 # ---------------------------------------------------------------------------
 MODEL_PATH="${MODEL_PATH:-Qwen/Qwen2.5-Omni-7B}"
-TRAIN_DATA="${TRAIN_DATA:-data/fullstate_sft_train.jsonl}"
-VAL_DATA="${VAL_DATA:-data/fullstate_sft_val.jsonl}"
-OUTPUT_DIR="${OUTPUT_DIR:-output/sft_fullstate_dst}"
+TRAIN_DATA="${TRAIN_DATA:-data/sft_train.jsonl}"
+VAL_DATA="${VAL_DATA:-data/sft_val.jsonl}"
+OUTPUT_DIR="${OUTPUT_DIR:-output/sft_incremental_dst}"
 
 NUM_GPUS="${NUM_GPUS:-2}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
@@ -21,49 +21,37 @@ NUM_EPOCHS="${NUM_EPOCHS:-3}"
 LORA_RANK="${LORA_RANK:-64}"
 LORA_ALPHA="${LORA_ALPHA:-128}"
 MAX_LENGTH="${MAX_LENGTH:-4096}"
-WANDB_PROJECT="${WANDB_PROJECT:-qwenomni-sft-fullstate}"
+WANDB_PROJECT="${WANDB_PROJECT:-qwenomni-sft}"
 
 # ---------------------------------------------------------------------------
 # Logging setup
 # ---------------------------------------------------------------------------
 mkdir -p logs
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-LOG_FILE="logs/sft_fullstate_${TIMESTAMP}.log"
+LOG_FILE="logs/sft_${TIMESTAMP}.log"
 
 # ---------------------------------------------------------------------------
 # Step 1: Convert data if SFT files don't exist
 # ---------------------------------------------------------------------------
 if [ ! -f "${TRAIN_DATA}" ]; then
-    echo "[INFO] Converting training data to full-state SFT format..."
-    uv run python scripts/prepare_fullstate_data.py \
-        --input data/dapo_train.jsonl \
-        --output "${TRAIN_DATA}" \
-        --format grpo
-    # Convert GRPO -> SFT format
-    uv run python scripts/convert_to_sft.py \
-        --input "${TRAIN_DATA}" \
-        --output "${TRAIN_DATA}.tmp"
-    mv "${TRAIN_DATA}.tmp" "${TRAIN_DATA}"
+    echo "[INFO] Converting training data to SFT format..."
+    uv run python scripts/train/convert_to_sft.py \
+        --input data/train.jsonl \
+        --output "${TRAIN_DATA}"
 fi
 
 if [ ! -f "${VAL_DATA}" ]; then
-    echo "[INFO] Converting validation data to full-state SFT format..."
-    uv run python scripts/prepare_fullstate_data.py \
-        --input data/dapo_val.jsonl \
-        --output "${VAL_DATA}" \
-        --format grpo
-    # Convert GRPO -> SFT format
-    uv run python scripts/convert_to_sft.py \
-        --input "${VAL_DATA}" \
-        --output "${VAL_DATA}.tmp"
-    mv "${VAL_DATA}.tmp" "${VAL_DATA}"
+    echo "[INFO] Converting validation data to SFT format..."
+    uv run python scripts/train/convert_to_sft.py \
+        --input data/val.jsonl \
+        --output "${VAL_DATA}"
 fi
 
 # ---------------------------------------------------------------------------
 # Step 2: Run SFT
 # ---------------------------------------------------------------------------
 export WANDB_PROJECT
-echo "[INFO] Starting full-state SFT training..."
+echo "[INFO] Starting SFT training..."
 echo "  Model:       ${MODEL_PATH}"
 echo "  Train data:  ${TRAIN_DATA}"
 echo "  Val data:    ${VAL_DATA}"
@@ -108,5 +96,5 @@ nohup uv run torchrun --nproc_per_node=${NUM_GPUS} \
     --gradient_checkpointing true \
     > "${LOG_FILE}" 2>&1 &
 
-echo "[INFO] Full-state SFT training started in background (PID: $!)"
+echo "[INFO] SFT training started in background (PID: $!)"
 echo "[INFO] Log: tail -f ${LOG_FILE}"

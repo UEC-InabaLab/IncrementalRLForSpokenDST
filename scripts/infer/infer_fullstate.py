@@ -15,16 +15,16 @@ Writes predictions JSONL compatible with eval_fullstate.py.
 
 Usage:
   # Oracle mode (default):
-  python scripts/infer_fullstate_vllm.py \
+  python scripts/infer/infer_fullstate.py \
       --model Qwen/Qwen2.5-Omni-7B \
-      --input data/fullstate_baseline_sft_test.jsonl \
+      --input data/fullstate_test.jsonl \
       --output output/fullstate_predictions.jsonl
 
   # Predicted history mode:
-  python scripts/infer_fullstate_vllm.py \
+  python scripts/infer/infer_fullstate.py \
       --mode predicted \
       --model Qwen/Qwen2.5-Omni-7B \
-      --input data/fullstate_baseline_sft_test.jsonl \
+      --input data/fullstate_test.jsonl \
       --output output/fullstate_predictions.jsonl
 """
 
@@ -32,7 +32,6 @@ import argparse
 import json
 import os
 import re
-import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Optional

@@ -3,7 +3,7 @@
 import sys
 sys.path.insert(0, '.')
 
-from src.swift_plugin.dapo_reward import (
+from src.reward import (
     DSTFormatReward,
     DSTRewardFullState,
     DSTRewardIncremental,

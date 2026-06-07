@@ -9,12 +9,12 @@ SFT format (output):
 The assistant turn contains the solution text.
 
 Usage:
-  python scripts/convert_to_sft.py \
-      --input data/dapo_train.jsonl \
+  python scripts/train/convert_to_sft.py \
+      --input data/train.jsonl \
       --output data/sft_train.jsonl
 
-  python scripts/convert_to_sft.py \
-      --input data/dapo_val.jsonl \
+  python scripts/train/convert_to_sft.py \
+      --input data/val.jsonl \
       --output data/sft_val.jsonl
 """
 

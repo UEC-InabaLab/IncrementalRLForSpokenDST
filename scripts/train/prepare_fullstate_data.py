@@ -12,15 +12,15 @@ Key transformations:
 
 Usage:
   # Convert SFT multimodal test data:
-  python scripts/prepare_fullstate_data.py \
-      --input data/incremental_baseline_sft_test.jsonl \
-      --output data/fullstate_baseline_sft_test.jsonl \
+  python scripts/train/prepare_fullstate_data.py \
+      --input data/test.jsonl \
+      --output data/fullstate_test.jsonl \
       --format sft
 
   # Convert GRPO training data:
-  python scripts/prepare_fullstate_data.py \
-      --input data/dapo_train.jsonl \
-      --output data/fullstate_dapo_train.jsonl \
+  python scripts/train/prepare_fullstate_data.py \
+      --input data/train.jsonl \
+      --output data/fullstate_train.jsonl \
       --format grpo
 """
 
@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-SYSTEM_PROMPT_PATH = Path(__file__).resolve().parent.parent / "system_prompt" / "fullstate_baseline.txt"
+SYSTEM_PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "fullstate.txt"
 
 
 def load_system_prompt() -> str:

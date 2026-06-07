@@ -5,7 +5,7 @@
 # Uses ground truth dialogue history for each turn.
 #
 # Usage:
-#   bash scripts/infer_oracle.sh
+#   bash scripts/infer/infer_oracle.sh
 # =============================================================================
 set -euo pipefail
 
@@ -18,7 +18,7 @@ ADAPTER="${ADAPTER:-output/grpo_incremental_dst/v9-20260215-160930/checkpoint-99
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
-VAL_DATA="${VAL_DATA:-data/incremental_baseline_sft_test.jsonl}"
+VAL_DATA="${VAL_DATA:-data/test.jsonl}"
 OUTPUT_DIR="${OUTPUT_DIR:-output/vllm_inference_results/oracle}"
 AUDIO_BASE_DIR="${AUDIO_BASE_DIR:-/shrdlu/users/higuchi/dst/audio_flamingo}"
 
@@ -85,10 +85,10 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 LOG_FILE="logs/infer_oracle_${TIMESTAMP}.log"
 
 nohup bash -c '
-uv run python scripts/infer_vllm.py '"$(printf ' %q' "${INFER_ARGS[@]}")"'
+uv run python scripts/infer/infer.py '"$(printf ' %q' "${INFER_ARGS[@]}")"'
 echo "[INFO] Inference completed."
 echo "[INFO] Running evaluation..."
-uv run python scripts/eval.py \
+uv run python scripts/eval/eval.py \
     --input "'"${OUTPUT_DIR}"'/predictions.jsonl" \
     --output "'"${OUTPUT_DIR}"'/metrics.json"
 echo "[INFO] Done. Results in '"${OUTPUT_DIR}"'/"

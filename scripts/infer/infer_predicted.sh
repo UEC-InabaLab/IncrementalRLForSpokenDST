@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Full-State DST - Predicted-History Inference with vLLM + Evaluation
+# Incremental DST - Predicted-History Inference with vLLM + Evaluation
 #
-# Uses model's own predicted transcripts for subsequent turns (cascading).
-# Only transcript cascades; each turn outputs the full state independently.
+# Uses model's own predicted transcript/state for subsequent turns (cascading).
 #
 # Usage:
-#   bash scripts/infer_fullstate_predicted.sh
+#   bash scripts/infer/infer_predicted.sh
 # =============================================================================
 set -euo pipefail
 
@@ -14,13 +13,14 @@ set -euo pipefail
 # Model & Checkpoint
 # ---------------------------------------------------------------------------
 MODEL_PATH="${MODEL_PATH:-Qwen/Qwen2.5-Omni-7B}"
-ADAPTER="${ADAPTER:-}"
-
+# ADAPTER="${ADAPTER:-output/sft_incremental_dst/v6-20260212-172415/checkpoint-4800}"
+# ADAPTER="${ADAPTER:-output/grpo_incremental_dst/v8-20260213-162756/checkpoint-1200}"
+ADAPTER="${ADAPTER:-output/grpo_incremental_dst_no_transcript/v0-20260217-231248/checkpoint-3400}"
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
-VAL_DATA="${VAL_DATA:-data/fullstate_baseline_sft_test.jsonl}"
-OUTPUT_DIR="${OUTPUT_DIR:-output/fullstate_vllm_inference_results/predicted}"
+VAL_DATA="${VAL_DATA:-data/test.jsonl}"
+OUTPUT_DIR="${OUTPUT_DIR:-output/vllm_inference_results/predicted}"
 AUDIO_BASE_DIR="${AUDIO_BASE_DIR:-/shrdlu/users/higuchi/dst/audio_flamingo}"
 
 # ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ fi
 # ---------------------------------------------------------------------------
 # Run inference
 # ---------------------------------------------------------------------------
-echo "[INFO] Running full-state vLLM inference (predicted-history mode)..."
+echo "[INFO] Running vLLM inference (predicted-history mode)..."
 echo "  Model:      ${MODEL_PATH}"
 echo "  Adapter:    ${ADAPTER:-none}"
 echo "  Data:       ${VAL_DATA}"
@@ -83,13 +83,13 @@ echo "  GPUs:       ${CUDA_VISIBLE_DEVICES}"
 mkdir -p "${OUTPUT_DIR}" logs
 
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-LOG_FILE="logs/infer_fullstate_predicted_${TIMESTAMP}.log"
+LOG_FILE="logs/infer_predicted_${TIMESTAMP}.log"
 
 nohup bash -c '
-uv run python scripts/infer_fullstate_vllm.py '"$(printf ' %q' "${INFER_ARGS[@]}")"'
+uv run python scripts/infer/infer.py '"$(printf ' %q' "${INFER_ARGS[@]}")"'
 echo "[INFO] Inference completed."
 echo "[INFO] Running evaluation..."
-uv run python scripts/eval_fullstate.py \
+uv run python scripts/eval/eval.py \
     --input "'"${OUTPUT_DIR}"'/predictions.jsonl" \
     --output "'"${OUTPUT_DIR}"'/metrics.json"
 echo "[INFO] Done. Results in '"${OUTPUT_DIR}"'/"

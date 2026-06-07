@@ -15,7 +15,7 @@ JGA and Slot F1 are computed by comparing the predicted JSON state
 directly against the gold belief_state.
 
 Usage:
-  python scripts/eval_fullstate.py --input output/fullstate_predictions.jsonl
+  python scripts/eval/eval_fullstate.py --input output/fullstate_predictions.jsonl
 """
 
 import argparse

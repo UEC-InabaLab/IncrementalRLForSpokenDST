@@ -2,15 +2,16 @@
 DST Reward Functions for ms-swift GRPO training.
 
 Registers custom ORM reward functions:
-  - dst_incremental: Combined reward for incremental DST (transcript WER + diff F1 + exact match + format)
-  - dst_fullstate:   Combined reward for full-state DST (transcript WER + slot F1 + JGA + format)
-  - dst_format:      Format-only reward
+  - dst_incremental:               Combined reward for incremental DST (transcript WER + diff F1 + exact match + format)
+  - dst_incremental_no_transcript: Ablation variant without transcript WER reward
+  - dst_fullstate:                 Combined reward for full-state DST (transcript WER + slot F1 + JGA + format)
+  - dst_format:                    Format-only reward
 
 Usage:
   swift rlhf --rlhf_type grpo \
-      --external_plugins src/swift_plugin/dapo_reward.py \
-      --reward_funcs dst_incremental dst_format \
-      --reward_weights 0.9 0.1
+      --external_plugins src/reward.py \
+      --reward_funcs dst_incremental \
+      --reward_weights 1.0
 """
 
 import json

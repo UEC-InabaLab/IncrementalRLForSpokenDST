@@ -13,12 +13,12 @@ MODEL_PATH="${MODEL_PATH:-Qwen/Qwen2.5-Omni-7B}"
 # e.g., SFT_CHECKPOINT=output/sft_incremental_dst/checkpoint-xxx
 SFT_CHECKPOINT="${SFT_CHECKPOINT:-output/sft_incremental_dst/v6-20260212-172415/checkpoint-4800}"
 
-TRAIN_DATA="${TRAIN_DATA:-data/dapo_train.jsonl}"
-VAL_DATA_FULL="${VAL_DATA_FULL:-data/dapo_val.jsonl}"
-VAL_DATA="${VAL_DATA:-data/dapo_val_small.jsonl}"
+TRAIN_DATA="${TRAIN_DATA:-data/train.jsonl}"
+VAL_DATA_FULL="${VAL_DATA_FULL:-data/val.jsonl}"
+VAL_DATA="${VAL_DATA:-data/val_small.jsonl}"
 VAL_SAMPLE_N="${VAL_SAMPLE_N:-50}"
 OUTPUT_DIR="${OUTPUT_DIR:-output/grpo_incremental_dst}"
-PLUGIN_PATH="${PLUGIN_PATH:-src/swift_plugin/dapo_reward.py}"
+PLUGIN_PATH="${PLUGIN_PATH:-src/reward.py}"
 
 NUM_TRAIN_GPUS="${NUM_TRAIN_GPUS:-8}"
 NUM_INFER_GPUS="${NUM_INFER_GPUS:-2}"
@@ -51,7 +51,7 @@ LOG_FILE="logs/grpo_${TIMESTAMP}.log"
 # ---------------------------------------------------------------------------
 if [ ! -f "${VAL_DATA}" ]; then
     echo "[INFO] Sampling ${VAL_SAMPLE_N} val examples from ${VAL_DATA_FULL}..."
-    uv run python scripts/sample_val.py \
+    uv run python scripts/train/sample_val.py \
         --input "${VAL_DATA_FULL}" --output "${VAL_DATA}" --n "${VAL_SAMPLE_N}"
 fi
 

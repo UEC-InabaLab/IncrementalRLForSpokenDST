@@ -16,7 +16,7 @@ input_belief_state and comparing the result against belief_state.
 This works uniformly for both oracle and predicted-history inference.
 
 Usage:
-  python scripts/eval.py --input output/predictions.jsonl
+  python scripts/eval/eval.py --input output/predictions.jsonl
 """
 
 import argparse

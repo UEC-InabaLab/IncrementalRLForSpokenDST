@@ -40,6 +40,7 @@ Evaluated on [SpokenWOZ](https://github.com/ZekangLi/SpokenWOZ).
 │   │   ├── train_grpo_ablation_no_transcript.sh  # ablation: no WER reward
 │   │   ├── train_sft_fullstate.sh                # full-state baseline SFT
 │   │   ├── train_grpo_fullstate.sh               # full-state baseline GRPO
+│   │   ├── split_audio.py            # extract per-sample user-turn audio from SpokenWOZ WAVs
 │   │   ├── prepare_data.py           # convert SpokenWOZ raw data → GRPO JSONL
 │   │   ├── convert_to_sft.py         # convert GRPO-format data → SFT format
 │   │   ├── prepare_fullstate_data.py # convert incremental data → full-state format
@@ -80,13 +81,28 @@ data/raw/
   audio/          # WAV files referenced by each JSON
 ```
 
-Convert to GRPO JSONL format:
+Each model input is the text dialogue history plus the audio of the latest user
+turn. SpokenWOZ ships one WAV per dialogue, so first extract per-sample
+user-turn audio (named `{dialogue_id}_{sys_idx}_{user_idx}.wav`) using the
+word-level timing in the JSON:
+
+```bash
+python scripts/train/split_audio.py --data data/raw/train_v1.0.json --audio-dir data/raw/audio --output-dir data/audio/train
+python scripts/train/split_audio.py --data data/raw/val_v1.0.json   --audio-dir data/raw/audio --output-dir data/audio/val
+python scripts/train/split_audio.py --data data/raw/test_v1.0.json  --audio-dir data/raw/audio --output-dir data/audio/test
+```
+
+Then convert to GRPO JSONL format. Each sample carries the diff-operation target
+(set / update / delete) derived from the belief state on the *next* system turn,
+plus the previous state from the current system turn:
 
 ```bash
 python scripts/train/prepare_data.py --data data/raw/train_v1.0.json --output data/train.jsonl
 python scripts/train/prepare_data.py --data data/raw/val_v1.0.json   --output data/val.jsonl
 python scripts/train/prepare_data.py --data data/raw/test_v1.0.json  --output data/test.jsonl
 ```
+
+Point training/inference at the split audio with `--audio-base-dir data/audio/<split>`.
 
 Full-state baseline data is auto-generated from the incremental data by the training scripts.
 

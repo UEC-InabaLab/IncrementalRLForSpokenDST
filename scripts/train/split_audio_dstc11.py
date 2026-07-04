@@ -1,136 +1,105 @@
-"""Extract per-sample user-turn audio for the DSTC-11 spoken-MultiWOZ track.
+"""Extract per-turn user audio from DSTC-11 Speech Aware Track HDF5 files.
 
-Mirrors split_audio.py (SpokenWOZ). NOTE ON RAW FORMAT: assumes one WAV per
-dialogue per variant plus word-level timing on each user turn, matching the
-SpokenWOZ convention this track is built on. Not yet verified against the
-actual downloaded files — adjust `AUDIO_SUBDIR_BY_VARIANT` / word-timing key
-names below once confirmed.
+Reference: Soltau et al., "DSTC-11: Speech Aware Task-Oriented Dialog
+Modeling Track" (aclanthology.org/2023.dstc-1.25). Raw data index:
+https://storage.googleapis.com/gresearch/dstc11/dstc11_20221102a.html
 
-Expected input structure (one audio subdir per variant):
-  <audio-dir>/<variant>/
-    MUL0001.wav
-    MUL0002.wav
-    ...
+Unlike SpokenWOZ (one WAV per dialogue, sliced by word timing), DSTC-11
+ships audio pre-split per user turn inside HDF5 files, one archive per
+"variant":
+  - tts_verbatim:       train + dev + test (4 TTS speaker dirs: tpa/tpb/tpc/tpd)
+  - human_verbatim:     dev + test only (no human speech for train)
+  - human_paraphrased:  test only
 
-Output structure:
+Each user-turn group in the HDF5 file is documented (per the challenge
+description) to contain:
+  - "audio": raw PCM waveform
+  - "feat":  512-dim speech-encoder features (unused here; we re-derive
+             audio directly for the Qwen2.5-Omni audio tower instead)
+  - attrs:   "hyp" (ASR hypothesis text), "align" (word alignment)
+
+NOT YET VERIFIED AGAINST THE ACTUAL DOWNLOADED FILES: the exact HDF5 group
+key naming (assumed f"{dialogue_id}_{turn_idx}" below) and the sample rate
+(assumed 16 kHz, matching the TTS/ASR pipeline described in the paper).
+Adjust the CONFIG constants once the real archives are unzipped and
+inspected with `h5py.File(path).visit(print)`.
+
+Output structure (matches the SpokenWOZ per-sample audio convention, so the
+generic train/infer scripts don't need changes):
   <output-dir>/
-    MUL0001_1_2.wav
-    MUL0001_3_4.wav
+    MUL0001_0.wav   # user turn k=0
+    MUL0001_1.wav   # user turn k=1
     ...
 
 Usage:
   python scripts/train/split_audio_dstc11.py \\
-      --data      data/raw_dstc11/train.json \\
-      --audio-dir data/raw_dstc11/audio \\
-      --variant   human_verbatim \\
-      --output-dir data/audio_dstc11/human_verbatim/train
+      --h5-dir data/raw_dstc11/train.tts-verbatim.2022-07-27 \\
+      --output-dir data/audio_dstc11/tts_verbatim/train
 """
 
 import argparse
-import json
+import re
 from pathlib import Path
 
+import h5py
 import soundfile as sf
 
 
-PADDING_MS = 100
+# --- CONFIG: adjust once the real HDF5 files are inspected -----------------
+GROUP_KEY_PATTERN = re.compile(r"^(?P<dialogue_id>[A-Za-z0-9]+)_(?P<turn_idx>\d+)$")
+AUDIO_DATASET_KEY = "audio"
+SAMPLE_RATE_ATTR = "sample_rate"
+DEFAULT_SAMPLE_RATE = 16000
+# ---------------------------------------------------------------------------
 
-VARIANTS = ("tts_verbatim", "human_verbatim", "human_paraphrased")
-USER_TEXT_KEY = "asr_text"
 
-
-def extract_samples(
-    dialogue_id: str,
-    log: list[dict],
-    audio_path: Path,
-    output_dir: Path,
-    variant: str,
-) -> int:
-    audio, sr = sf.read(str(audio_path), always_2d=False)
-    total_samples = len(audio) if audio.ndim == 1 else audio.shape[0]
-
+def extract_from_h5(h5_path: Path, output_dir: Path) -> int:
     saved = 0
-    k = 0
-    while True:
-        sys_idx = 2 * k + 1
-        user_idx = 2 * k + 2
+    with h5py.File(h5_path, "r") as f:
+        for group_key in f.keys():
+            m = GROUP_KEY_PATTERN.match(group_key)
+            if not m:
+                print(f"  [WARN] {h5_path.name}: unrecognized group key '{group_key}', skipping")
+                continue
 
-        if user_idx >= len(log):
-            break
+            group = f[group_key]
+            if AUDIO_DATASET_KEY not in group:
+                print(f"  [WARN] {h5_path.name}/{group_key}: no '{AUDIO_DATASET_KEY}' dataset, skipping")
+                continue
 
-        sys_turn = log[sys_idx]
-        user_turn = log[user_idx]
+            audio = group[AUDIO_DATASET_KEY][()]
+            sr = int(group.attrs.get(SAMPLE_RATE_ATTR, DEFAULT_SAMPLE_RATE))
 
-        if sys_turn.get("tag") != "system" or user_turn.get("tag") != "user":
-            k += 1
-            continue
-
-        per_variant_words = user_turn.get(USER_TEXT_KEY, {})
-        words = (
-            per_variant_words.get(variant, {}).get("words", [])
-            if isinstance(per_variant_words, dict)
-            else []
-        ) or user_turn.get("words", [])
-
-        if not words:
-            print(f"  [WARN] {dialogue_id} user turn {user_idx}: no word timing, skipping")
-            k += 1
-            continue
-
-        begin_ms = max(0, words[0]["BeginTime"] - PADDING_MS)
-        end_ms = words[-1]["EndTime"] + PADDING_MS
-
-        begin_sample = int(begin_ms * sr / 1000)
-        end_sample = min(total_samples, int(end_ms * sr / 1000))
-
-        if begin_sample >= end_sample:
-            print(f"  [WARN] {dialogue_id} user turn {user_idx}: empty segment, skipping")
-            k += 1
-            continue
-
-        segment = audio[begin_sample:end_sample]
-        out_path = output_dir / f"{dialogue_id}_{sys_idx}_{user_idx}.wav"
-        sf.write(str(out_path), segment, sr)
-        saved += 1
-        k += 1
-
+            dialogue_id = m.group("dialogue_id")
+            turn_idx = m.group("turn_idx")
+            out_path = output_dir / f"{dialogue_id}_{turn_idx}.wav"
+            sf.write(str(out_path), audio, sr)
+            saved += 1
     return saved
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", required=True, help="DSTC-11 spoken-MultiWOZ JSON file")
-    parser.add_argument("--audio-dir", required=True, help="Directory with per-dialogue WAV files")
-    parser.add_argument("--variant", required=True, choices=VARIANTS)
-    parser.add_argument("--output-dir", required=True, help="Output directory for per-sample WAV files")
-    parser.add_argument("--ext", default="wav")
+    parser.add_argument("--h5-dir", required=True, help="Directory containing DSTC-11 .h5 files (one per TTS speaker, or per split)")
+    parser.add_argument("--output-dir", required=True, help="Output directory for per-turn WAV files")
+    parser.add_argument("--ext", default="h5")
     args = parser.parse_args()
 
-    audio_dir = Path(args.audio_dir) / args.variant
+    h5_dir = Path(args.h5_dir)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(args.data, encoding="utf-8") as f:
-        data: dict = json.load(f)
+    h5_files = sorted(h5_dir.glob(f"*.{args.ext}"))
+    if not h5_files:
+        print(f"[WARN] No .{args.ext} files found in {h5_dir}")
 
     total_saved = 0
-    skipped_dialogues = 0
-
-    for dialogue_id, dialogue in data.items():
-        log = dialogue.get("log", [])
-        audio_path = audio_dir / f"{dialogue_id}.{args.ext}"
-
-        if not audio_path.exists():
-            print(f"[WARN] Audio not found: {audio_path}, skipping dialogue")
-            skipped_dialogues += 1
-            continue
-
-        saved = extract_samples(dialogue_id, log, audio_path, output_dir, args.variant)
+    for h5_path in h5_files:
+        saved = extract_from_h5(h5_path, output_dir)
+        print(f"  {h5_path.name}: {saved} turns extracted")
         total_saved += saved
 
     print(f"\nDone. {total_saved} sample files written to {output_dir}/")
-    if skipped_dialogues:
-        print(f"Skipped {skipped_dialogues} dialogues (audio file not found)")
 
 
 if __name__ == "__main__":

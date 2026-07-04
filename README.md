@@ -125,27 +125,36 @@ JSONL-building logic shared across datasets lives in
 | Dataset | Status | Prep scripts |
 |---|---|---|
 | SpokenWOZ | in use | `split_audio.py`, `prepare_data.py` |
-| [DSTC-11 Spoken MultiWOZ](https://aclanthology.org/2023.dstc-1.25/) | schema assumed from MultiWOZ, not yet verified against raw files | `split_audio_dstc11.py`, `prepare_data_dstc11.py` |
-| SpokenTOD ([arXiv:2603.16783](https://arxiv.org/html/2603.16783)) | speculative — no public download link/schema in the paper yet | `prepare_data_spokentod.py` |
-| RealTalk-CN ([arXiv:2508.10015](https://arxiv.org/html/2508.10015v1)) | speculative — paper says data "will be made available", not yet public | `prepare_data_realtalk_cn.py` |
+| [DSTC-11 Speech Aware Track](https://aclanthology.org/2023.dstc-1.25/) | download confirmed (see below); HDF5 group-key/attr names not yet verified against the real archives | `split_audio_dstc11.py`, `prepare_data_dstc11.py` |
+| SpokenTOD ([arXiv:2603.16783](https://arxiv.org/html/2603.16783)) | released on [Hugging Face](https://huggingface.co/datasets/standardwish/SpokenTOD) (gated — requires HF login); schema not yet inspected | `prepare_data_spokentod.py` |
+| RealTalk-CN ([arXiv:2508.10015](https://arxiv.org/html/2508.10015v1)) | released on [Hugging Face](https://huggingface.co/datasets/BAAI/RealTalk-CN) / [GitHub](https://github.com/Summer-Enzhi/RealTalk) (gated — requires HF login); schema not yet inspected | `prepare_data_realtalk_cn.py` |
 
-#### DSTC-11 Spoken MultiWOZ
+#### DSTC-11 Speech Aware Track
 
-Re-releases MultiWOZ 2.1 dialogues with three spoken user-turn variants
-(`tts_verbatim`, `human_verbatim`, `human_paraphrased`) over the same
-belief-state schema as SpokenWOZ. The raw-file layout in the script header
-is a best-effort guess (word-level timing per dialogue WAV, mirroring
-SpokenWOZ) — confirm against the actual download and adjust the `CONFIG`
-constants at the top of each script if field names differ.
+Re-releases MultiWOZ 2.1 dialogues with spoken user turns. Confirmed from
+the [raw-data index](https://storage.googleapis.com/gresearch/dstc11/dstc11_20221102a.html):
+
+- **train** has TTS-verbatim audio only (4 synthetic speakers: `tpa`/`tpb`/`tpc`/`tpd`, 8434 dialogues) — no human speech for train.
+- **dev**/**test** additionally ship `human-verbatim` and `human-paraphrased` audio.
+- Belief-state labels live in separate `{split}.gold.json` files (already flat `{domain: {slot: value}}`, not MultiWOZ's nested `semi`/`book` sections), keyed by dialogue ID as an ordered list of `{"response", "state", "active_domains"}` per system turn.
+- Audio is **not** one WAV per dialogue like SpokenWOZ — it ships as HDF5 files with one group per user turn, containing raw PCM (`audio`), a 512-dim speech-encoder feature (`feat`, unused here), and an ASR hypothesis (`hyp` attr) used as the transcript-history text.
+
+The HDF5 group-key naming (assumed `f"{dialogue_id}_{turn_idx}"`) and
+attribute names are our best guess from the challenge description, not yet
+checked against the unzipped files — adjust the `CONFIG` block at the top
+of `split_audio_dstc11.py` / `prepare_data_dstc11.py` once confirmed (e.g.
+via `h5py.File(path).visititems(print)`).
 
 ```bash
 python scripts/train/split_audio_dstc11.py \
-    --data data/raw_dstc11/train.json --audio-dir data/raw_dstc11/audio \
-    --variant human_verbatim --output-dir data/audio_dstc11/human_verbatim/train
+    --h5-dir data/raw_dstc11/dev-dstc11.human-verbatim.2022-09-29 \
+    --output-dir data/audio_dstc11/human_verbatim/dev
 
 python scripts/train/prepare_data_dstc11.py \
-    --data data/raw_dstc11/train.json --variant human_verbatim \
-    --output data/dstc11/train.jsonl
+    --gold data/raw_dstc11/dev-dstc11.2022-1102.gold.json \
+    --h5-dir data/raw_dstc11/dev-dstc11.human-verbatim.2022-09-29 \
+    --variant human_verbatim \
+    --output data/dstc11/val.jsonl
 
 GRPO_TRAIN_DATA=data/dstc11/train.jsonl GRPO_VAL_DATA=data/dstc11/val.jsonl \
 OUTPUT_DIR=output/sft_dstc11 WANDB_PROJECT=qwenomni-sft-dstc11 \
@@ -154,11 +163,15 @@ bash scripts/train/train_sft.sh
 
 #### SpokenTOD / RealTalk-CN
 
-Neither paper publishes a confirmed schema or download URL as of writing,
-so `prepare_data_spokentod.py` / `prepare_data_realtalk_cn.py` are scaffolds
-based on the papers' descriptions (flat per-turn domain/slot state rather
-than MultiWOZ's nested ontology), with all assumed field names collected in
-a `CONFIG` block at the top of each file. Once the raw data is obtained:
+Both are real, released datasets, but their Hugging Face pages/API require
+an authenticated, terms-accepted session (unauthenticated fetches return
+401), so their exact schema hasn't been inspected here. `prepare_data_spokentod.py`
+/ `prepare_data_realtalk_cn.py` are scaffolds based on the papers'
+descriptions (flat per-turn domain/slot state rather than MultiWOZ's nested
+ontology), with all assumed field names collected in a `CONFIG` block at
+the top of each file. After logging into Hugging Face and downloading (e.g.
+`huggingface-cli download standardwish/SpokenTOD` / `huggingface-cli
+download BAAI/RealTalk-CN`):
 
 1. Inspect a sample dialogue and update the `CONFIG` constants (speaker
    tags, state nesting, audio filename key) to match.

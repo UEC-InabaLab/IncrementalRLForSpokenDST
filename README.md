@@ -40,8 +40,13 @@ Evaluated on [SpokenWOZ](https://github.com/ZekangLi/SpokenWOZ).
 │   │   ├── train_grpo_ablation_no_transcript.sh  # ablation: no WER reward
 │   │   ├── train_sft_fullstate.sh                # full-state baseline SFT
 │   │   ├── train_grpo_fullstate.sh               # full-state baseline GRPO
+│   │   ├── dst_common.py             # shared diff-op / JSONL-building helpers (all datasets)
 │   │   ├── split_audio.py            # extract per-sample user-turn audio from SpokenWOZ WAVs
 │   │   ├── prepare_data.py           # convert SpokenWOZ raw data → GRPO JSONL
+│   │   ├── split_audio_dstc11.py     # extract per-sample user-turn audio from DSTC-11 WAVs
+│   │   ├── prepare_data_dstc11.py    # convert DSTC-11 spoken-MultiWOZ raw data → GRPO JSONL
+│   │   ├── prepare_data_spokentod.py    # convert SpokenTOD raw data → GRPO JSONL (speculative, see Data section)
+│   │   ├── prepare_data_realtalk_cn.py  # convert RealTalk-CN raw data → GRPO JSONL (speculative, see Data section)
 │   │   ├── convert_to_sft.py         # convert GRPO-format data → SFT format
 │   │   ├── prepare_fullstate_data.py # convert incremental data → full-state format
 │   │   └── sample_val.py             # sample a small validation subset
@@ -105,6 +110,71 @@ python scripts/train/prepare_data.py --data data/raw/test.json  --output data/te
 Point training/inference at the split audio with `--audio-base-dir data/audio/<split>`.
 
 Full-state baseline data is auto-generated from the incremental data by the training scripts.
+
+### Additional datasets
+
+All data-prep scripts produce the same GRPO JSONL schema (`messages` /
+`audios` / `solution` / `belief_state` / `prev_belief_state`), so
+`train_sft.sh`, `train_grpo.sh`, `infer_oracle.sh` / `infer_predicted.sh`,
+and `eval.py` work unchanged for any dataset below — just point their data
+env vars (`GRPO_TRAIN_DATA` / `TRAIN_DATA` / `VAL_DATA` / `AUDIO_BASE_DIR` /
+`OUTPUT_DIR` / `WANDB_PROJECT`) at the dataset's directory. Diff-op and
+JSONL-building logic shared across datasets lives in
+`scripts/train/dst_common.py`.
+
+| Dataset | Status | Prep scripts |
+|---|---|---|
+| SpokenWOZ | in use | `split_audio.py`, `prepare_data.py` |
+| [DSTC-11 Spoken MultiWOZ](https://aclanthology.org/2023.dstc-1.25/) | schema assumed from MultiWOZ, not yet verified against raw files | `split_audio_dstc11.py`, `prepare_data_dstc11.py` |
+| SpokenTOD ([arXiv:2603.16783](https://arxiv.org/html/2603.16783)) | speculative — no public download link/schema in the paper yet | `prepare_data_spokentod.py` |
+| RealTalk-CN ([arXiv:2508.10015](https://arxiv.org/html/2508.10015v1)) | speculative — paper says data "will be made available", not yet public | `prepare_data_realtalk_cn.py` |
+
+#### DSTC-11 Spoken MultiWOZ
+
+Re-releases MultiWOZ 2.1 dialogues with three spoken user-turn variants
+(`tts_verbatim`, `human_verbatim`, `human_paraphrased`) over the same
+belief-state schema as SpokenWOZ. The raw-file layout in the script header
+is a best-effort guess (word-level timing per dialogue WAV, mirroring
+SpokenWOZ) — confirm against the actual download and adjust the `CONFIG`
+constants at the top of each script if field names differ.
+
+```bash
+python scripts/train/split_audio_dstc11.py \
+    --data data/raw_dstc11/train.json --audio-dir data/raw_dstc11/audio \
+    --variant human_verbatim --output-dir data/audio_dstc11/human_verbatim/train
+
+python scripts/train/prepare_data_dstc11.py \
+    --data data/raw_dstc11/train.json --variant human_verbatim \
+    --output data/dstc11/train.jsonl
+
+GRPO_TRAIN_DATA=data/dstc11/train.jsonl GRPO_VAL_DATA=data/dstc11/val.jsonl \
+OUTPUT_DIR=output/sft_dstc11 WANDB_PROJECT=qwenomni-sft-dstc11 \
+bash scripts/train/train_sft.sh
+```
+
+#### SpokenTOD / RealTalk-CN
+
+Neither paper publishes a confirmed schema or download URL as of writing,
+so `prepare_data_spokentod.py` / `prepare_data_realtalk_cn.py` are scaffolds
+based on the papers' descriptions (flat per-turn domain/slot state rather
+than MultiWOZ's nested ontology), with all assumed field names collected in
+a `CONFIG` block at the top of each file. Once the raw data is obtained:
+
+1. Inspect a sample dialogue and update the `CONFIG` constants (speaker
+   tags, state nesting, audio filename key) to match.
+2. If audio ships one-file-per-dialogue rather than pre-split per turn, add
+   a `split_audio_<dataset>.py` analogous to `split_audio_dstc11.py`.
+3. For RealTalk-CN (Chinese), `scripts/eval/eval.py`'s `compute_transcript_wer`
+   splits on whitespace (word-level WER); switch to a character split for a
+   correct CER on Chinese transcripts before reporting metrics.
+
+```bash
+python scripts/train/prepare_data_spokentod.py \
+    --data data/raw_spokentod/train.json --output data/spokentod/train.jsonl
+
+python scripts/train/prepare_data_realtalk_cn.py \
+    --data data/raw_realtalk_cn/train.json --output data/realtalk_cn/train.jsonl
+```
 
 ## Training
 

@@ -137,17 +137,22 @@ file format are confirmed directly from the [challenge's index
 page](https://storage.googleapis.com/gresearch/dstc11/dstc11_20221102a.html)
 (fetched and inspected directly — not taken from a search-engine summary):
 
-- **train** has TTS-verbatim audio only (4 synthetic speakers: `tpa`/`tpb`/`tpc`/`tpd`, each containing all 8434 training dialogues) — no human speech for train.
-- **dev**/**test** additionally ship `human-verbatim` and `human-paraphrased` audio.
+- **train** has TTS-verbatim audio only (4 synthetic speakers: `tpa`/`tpb`/`tpc`/`tpd` subdirectories, each containing all 8434 training dialogues) — no human speech for train.
+- **dev**/**test** additionally ship `human-verbatim` and `human-paraphrased` audio. Their zips have **no speaker subdirectory** — `.hd5` files sit directly under a single top-level folder (e.g. `dev-dstc11.tts-verbatim/mul0012.hd5`), unlike train's per-speaker layout.
 - A separate **mapping `.txt` file** per split gives the system/user turn text (`line_nr: N dialog_id: X.json turn_id: K text: user|agent: ...`); it has no audio itself.
 - A separate **gold `.json` file** per split (dev/test only — train has no gold file) gives the belief state: `{"pmul1635": [{"hotel": {"area": "east", ...}}, ...], ...}`, one already-flat state per user turn.
-- Audio is **not** one WAV per dialogue like SpokenWOZ — each zip contains one **HDF5 file per dialogue** (e.g. `tpa/mul0016.hd5`), with one group per *user* turn (system turns have no audio) keyed by a string like `"tpe_line_nr: 4519 dialog_id: mul0016.json turn_id: 1"`, containing raw int16 PCM at 16 kHz (`audio`) and an ASR hypothesis (`hyp` attr) used as the transcript-history text.
+- Audio is **not** one WAV per dialogue like SpokenWOZ — each zip contains one **HDF5 file per dialogue** (e.g. `mul0012.hd5`), with one group per *user* turn (system turns have no audio) keyed by a string like `"tpe_line_nr: 2409 dialog_id: mul0012.json turn_id: 1"`, containing raw int16 PCM at 16 kHz (`audio`, e.g. shape `(60506,)`), a `(T, 512)` float32 speech-encoder feature (`feat`, unused here), and an ASR hypothesis (`hyp` attr, e.g. `" ⁇ noise> information on a hotel that includes free parking pleas"` — real ASR output, artifacts included) used as the transcript-history text.
 
-`prepare_data_dstc11.py` joins all three files by `turn_id`; see its
-module docstring for the exact indexing. This has been exercised against
-synthetic files built to match the confirmed formats above, but not yet
-against the real downloaded archives — worth a smoke-test on a handful of
-real dialogues once downloaded.
+**Verified against the real files** (2026-07-05): downloaded the dev
+mapping `.txt` and gold `.json` in full (all 1000 dev dialogues → 6374
+samples, zero failures) and one real per-dialogue `.hd5`
+(`mul0012.hd5`, fetched via an HTTP Range request against the zip's
+central directory so only ~2 MB transferred instead of the full 1.4 GB
+archive — useful if disk space is tight). `prepare_data_dstc11.py` and
+`split_audio_dstc11.py` both ran end-to-end against this real data and
+produced correct output (matching audio filenames, correct diff ops,
+correctly ordered history). The `CONFIG` constants in both scripts should
+not need further adjustment.
 
 ```bash
 python scripts/train/split_audio_dstc11.py \

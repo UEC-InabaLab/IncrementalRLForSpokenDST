@@ -123,7 +123,7 @@ JSONL-building logic shared across datasets lives in
 | Dataset | Status | Prep scripts |
 |---|---|---|
 | SpokenWOZ | in use | `split_audio.py`, `prepare_data.py` |
-| [DSTC-11 Speech Aware Track](https://aclanthology.org/2023.dstc-1.25/) | download confirmed (see below); HDF5 group-key/attr names not yet verified against the real archives | `split_audio_dstc11.py`, `prepare_data_dstc11.py` |
+| [DSTC-11 Speech Aware Track](https://aclanthology.org/2023.dstc-1.25/) | download + file format confirmed directly from the [challenge's index page](https://storage.googleapis.com/gresearch/dstc11/dstc11_20221102a.html) (not yet run against the actual downloaded archives) | `split_audio_dstc11.py`, `prepare_data_dstc11.py` |
 
 SpokenTOD ([arXiv:2603.16783](https://arxiv.org/html/2603.16783)) and
 RealTalk-CN were considered but dropped: SpokenTOD's supposed Hugging Face
@@ -132,19 +132,22 @@ RealTalk-CN is Chinese-only, out of scope for this project.
 
 #### DSTC-11 Speech Aware Track
 
-Re-releases MultiWOZ 2.1 dialogues with spoken user turns. Confirmed from
-the [raw-data index](https://storage.googleapis.com/gresearch/dstc11/dstc11_20221102a.html):
+Re-releases MultiWOZ 2.1 dialogues with spoken user turns. Download and
+file format are confirmed directly from the [challenge's index
+page](https://storage.googleapis.com/gresearch/dstc11/dstc11_20221102a.html)
+(fetched and inspected directly — not taken from a search-engine summary):
 
-- **train** has TTS-verbatim audio only (4 synthetic speakers: `tpa`/`tpb`/`tpc`/`tpd`, 8434 dialogues) — no human speech for train.
+- **train** has TTS-verbatim audio only (4 synthetic speakers: `tpa`/`tpb`/`tpc`/`tpd`, each containing all 8434 training dialogues) — no human speech for train.
 - **dev**/**test** additionally ship `human-verbatim` and `human-paraphrased` audio.
-- Belief-state labels live in separate `{split}.gold.json` files (already flat `{domain: {slot: value}}`, not MultiWOZ's nested `semi`/`book` sections), keyed by dialogue ID as an ordered list of `{"response", "state", "active_domains"}` per system turn.
-- Audio is **not** one WAV per dialogue like SpokenWOZ — it ships as HDF5 files with one group per user turn, containing raw PCM (`audio`), a 512-dim speech-encoder feature (`feat`, unused here), and an ASR hypothesis (`hyp` attr) used as the transcript-history text.
+- A separate **mapping `.txt` file** per split gives the system/user turn text (`line_nr: N dialog_id: X.json turn_id: K text: user|agent: ...`); it has no audio itself.
+- A separate **gold `.json` file** per split (dev/test only — train has no gold file) gives the belief state: `{"pmul1635": [{"hotel": {"area": "east", ...}}, ...], ...}`, one already-flat state per user turn.
+- Audio is **not** one WAV per dialogue like SpokenWOZ — each zip contains one **HDF5 file per dialogue** (e.g. `tpa/mul0016.hd5`), with one group per *user* turn (system turns have no audio) keyed by a string like `"tpe_line_nr: 4519 dialog_id: mul0016.json turn_id: 1"`, containing raw int16 PCM at 16 kHz (`audio`) and an ASR hypothesis (`hyp` attr) used as the transcript-history text.
 
-The HDF5 group-key naming (assumed `f"{dialogue_id}_{turn_idx}"`) and
-attribute names are our best guess from the challenge description, not yet
-checked against the unzipped files — adjust the `CONFIG` block at the top
-of `split_audio_dstc11.py` / `prepare_data_dstc11.py` once confirmed (e.g.
-via `h5py.File(path).visititems(print)`).
+`prepare_data_dstc11.py` joins all three files by `turn_id`; see its
+module docstring for the exact indexing. This has been exercised against
+synthetic files built to match the confirmed formats above, but not yet
+against the real downloaded archives — worth a smoke-test on a handful of
+real dialogues once downloaded.
 
 ```bash
 python scripts/train/split_audio_dstc11.py \
@@ -153,6 +156,7 @@ python scripts/train/split_audio_dstc11.py \
 
 python scripts/train/prepare_data_dstc11.py \
     --gold data/raw_dstc11/dev-dstc11.2022-1102.gold.json \
+    --mapping data/raw_dstc11/dev-dstc11.2022-07-27.txt \
     --h5-dir data/raw_dstc11/dev-dstc11.human-verbatim.2022-09-29 \
     --variant human_verbatim \
     --output data/dstc11/val.jsonl

@@ -3,7 +3,7 @@
 import sys
 sys.path.insert(0, '.')
 
-from scripts.eval import (
+from scripts.eval.eval import (
     apply_diff_ops,
     compute_slot_f1,
     compute_transcript_wer,
@@ -12,7 +12,7 @@ from scripts.eval import (
     extract_transcript,
     parse_diff_ops,
 )
-from scripts.eval_fullstate import (
+from scripts.eval.eval_fullstate import (
     compute_slot_f1 as fs_compute_slot_f1,
     compute_transcript_wer as fs_compute_transcript_wer,
     evaluate as fs_evaluate,

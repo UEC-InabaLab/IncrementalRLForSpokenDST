@@ -371,9 +371,12 @@ def run_predicted(
 ) -> list[dict[str, Any]]:
     """Run inference using model-predicted history (cascading evaluation).
 
-    Processes each dialogue turn by turn. After each round, the model's
-    predicted transcript is used to build the text context for the next turn.
-    Only transcript cascades; each turn outputs the full state independently.
+    Processes each dialogue turn by turn. System turns (always ground
+    truth — known text, never transcribed) are injected directly from each
+    sample's "sys_text"/"opening_user_text" fields; only the *user* turn
+    history cascades from the model's own predicted transcript, since
+    that's the only part actually inferred from audio. Each turn still
+    outputs the full state independently (state itself doesn't cascade).
     """
     print("[INFO] Mode: predicted (model-predicted history)")
 
@@ -405,6 +408,14 @@ def run_predicted(
         ]
         round_samples = [dialogues[did][round_idx] for did in round_dids]
 
+        # System text (and, for the dialogue's opening turn, the first user
+        # utterance) is always ground truth — inject directly rather than
+        # relying on the model to have reproduced it in a prior round.
+        for sample, did in zip(round_samples, round_dids):
+            if not pred_history[did]:
+                pred_history[did].append(f"User: {sample['opening_user_text']}")
+            pred_history[did].append(f"System: {sample['sys_text']}")
+
         # Build messages with predicted history
         round_messages = []
         for sample, did in zip(round_samples, round_dids):
@@ -430,7 +441,9 @@ def run_predicted(
         for sample, did, output in zip(round_samples, round_dids, outputs):
             prediction = output.outputs[0].text
 
-            # Update dialogue history with predicted transcript
+            # Update dialogue history with the model's own predicted user
+            # transcript (the system line for this round was already
+            # appended above from ground truth before inference ran).
             transcript = _extract_transcript(prediction)
             if transcript:
                 for line in transcript.strip().split("\n"):

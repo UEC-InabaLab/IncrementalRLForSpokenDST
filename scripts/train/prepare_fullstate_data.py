@@ -317,6 +317,11 @@ def _build_grpo_sample(
     if audio_paths:
         sample["audios"] = audio_paths
 
+    # Preserve metadata needed by infer_fullstate.py's predicted (cascading) mode
+    for key in ("dialogue_id", "turn_idx", "sys_text", "opening_user_text"):
+        if key in original:
+            sample[key] = original[key]
+
     return sample
 
 
@@ -343,13 +348,11 @@ def _build_sft_sample(
         "transcript": transcript,
     }
 
-    # Preserve metadata from original
-    if "id" in original:
-        sample["id"] = original["id"]
-    if "dialogue_id" in original:
-        sample["dialogue_id"] = original["dialogue_id"]
-    if "turn_idx" in original:
-        sample["turn_idx"] = original["turn_idx"]
+    # Preserve metadata from original (dialogue_id/sys_text/opening_user_text
+    # are needed by infer_fullstate.py's predicted (cascading) mode)
+    for key in ("id", "dialogue_id", "turn_idx", "sys_text", "opening_user_text"):
+        if key in original:
+            sample[key] = original[key]
 
     return sample
 

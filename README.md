@@ -14,7 +14,6 @@ Instead of outputting the full belief state at every turn, the model outputs **d
 
 ```
 <transcript>
-System: do you have a price preference .
 User: i'd like something cheap .
 </transcript>
 <answer>set(restaurant.pricerange=cheap)</answer>

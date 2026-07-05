@@ -43,10 +43,9 @@ Evaluated on [SpokenWOZ](https://github.com/ZekangLi/SpokenWOZ).
 │   │   ├── dst_common.py             # shared diff-op / JSONL-building helpers (all datasets)
 │   │   ├── split_audio.py            # extract per-sample user-turn audio from SpokenWOZ WAVs
 │   │   ├── prepare_data.py           # convert SpokenWOZ raw data → GRPO JSONL
-│   │   ├── split_audio_dstc11.py     # extract per-sample user-turn audio from DSTC-11 WAVs
-│   │   ├── prepare_data_dstc11.py    # convert DSTC-11 spoken-MultiWOZ raw data → GRPO JSONL
+│   │   ├── split_audio_dstc11.py     # extract per-turn user audio from DSTC-11 HDF5 files
+│   │   ├── prepare_data_dstc11.py    # convert DSTC-11 gold state + HDF5 → GRPO JSONL
 │   │   ├── prepare_data_spokentod.py    # convert SpokenTOD raw data → GRPO JSONL (speculative, see Data section)
-│   │   ├── prepare_data_realtalk_cn.py  # convert RealTalk-CN raw data → GRPO JSONL (speculative, see Data section)
 │   │   ├── convert_to_sft.py         # convert GRPO-format data → SFT format
 │   │   ├── prepare_fullstate_data.py # convert incremental data → full-state format
 │   │   └── sample_val.py             # sample a small validation subset
@@ -127,7 +126,6 @@ JSONL-building logic shared across datasets lives in
 | SpokenWOZ | in use | `split_audio.py`, `prepare_data.py` |
 | [DSTC-11 Speech Aware Track](https://aclanthology.org/2023.dstc-1.25/) | download confirmed (see below); HDF5 group-key/attr names not yet verified against the real archives | `split_audio_dstc11.py`, `prepare_data_dstc11.py` |
 | SpokenTOD ([arXiv:2603.16783](https://arxiv.org/html/2603.16783)) | released on [Hugging Face](https://huggingface.co/datasets/standardwish/SpokenTOD) (gated — requires HF login); schema not yet inspected | `prepare_data_spokentod.py` |
-| RealTalk-CN ([arXiv:2508.10015](https://arxiv.org/html/2508.10015v1)) | released on [Hugging Face](https://huggingface.co/datasets/BAAI/RealTalk-CN) / [GitHub](https://github.com/Summer-Enzhi/RealTalk) (gated — requires HF login); schema not yet inspected | `prepare_data_realtalk_cn.py` |
 
 #### DSTC-11 Speech Aware Track
 
@@ -161,32 +159,25 @@ OUTPUT_DIR=output/sft_dstc11 WANDB_PROJECT=qwenomni-sft-dstc11 \
 bash scripts/train/train_sft.sh
 ```
 
-#### SpokenTOD / RealTalk-CN
+#### SpokenTOD
 
-Both are real, released datasets, but their Hugging Face pages/API require
-an authenticated, terms-accepted session (unauthenticated fetches return
-401), so their exact schema hasn't been inspected here. `prepare_data_spokentod.py`
-/ `prepare_data_realtalk_cn.py` are scaffolds based on the papers'
-descriptions (flat per-turn domain/slot state rather than MultiWOZ's nested
-ontology), with all assumed field names collected in a `CONFIG` block at
-the top of each file. After logging into Hugging Face and downloading (e.g.
-`huggingface-cli download standardwish/SpokenTOD` / `huggingface-cli
-download BAAI/RealTalk-CN`):
+A real, released dataset, but its Hugging Face page/API requires an
+authenticated, terms-accepted session (unauthenticated fetches return 401),
+so its exact schema hasn't been inspected here. `prepare_data_spokentod.py`
+is a scaffold based on the paper's description (flat per-turn domain/slot
+state rather than MultiWOZ's nested ontology), with all assumed field names
+collected in a `CONFIG` block at the top of the file. After logging into
+Hugging Face and downloading (`huggingface-cli download
+standardwish/SpokenTOD`):
 
 1. Inspect a sample dialogue and update the `CONFIG` constants (speaker
    tags, state nesting, audio filename key) to match.
 2. If audio ships one-file-per-dialogue rather than pre-split per turn, add
-   a `split_audio_<dataset>.py` analogous to `split_audio_dstc11.py`.
-3. For RealTalk-CN (Chinese), `scripts/eval/eval.py`'s `compute_transcript_wer`
-   splits on whitespace (word-level WER); switch to a character split for a
-   correct CER on Chinese transcripts before reporting metrics.
+   a `split_audio_spokentod.py` analogous to `split_audio_dstc11.py`.
 
 ```bash
 python scripts/train/prepare_data_spokentod.py \
     --data data/raw_spokentod/train.json --output data/spokentod/train.jsonl
-
-python scripts/train/prepare_data_realtalk_cn.py \
-    --data data/raw_realtalk_cn/train.json --output data/realtalk_cn/train.jsonl
 ```
 
 ## Training

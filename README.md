@@ -39,8 +39,11 @@ Evaluated on [SpokenWOZ](https://github.com/ZekangLi/SpokenWOZ).
 │   │   ├── train_grpo_ablation_no_transcript.sh  # ablation: no WER reward
 │   │   ├── train_sft_fullstate.sh                # full-state baseline SFT
 │   │   ├── train_grpo_fullstate.sh               # full-state baseline GRPO
+│   │   ├── dst_common.py             # shared diff-op / JSONL-building helpers (all datasets)
 │   │   ├── split_audio.py            # extract per-sample user-turn audio from SpokenWOZ WAVs
 │   │   ├── prepare_data.py           # convert SpokenWOZ raw data → GRPO JSONL
+│   │   ├── split_audio_dstc11.py     # extract per-turn user audio from DSTC-11 HDF5 files
+│   │   ├── prepare_data_dstc11.py    # convert DSTC-11 gold state + HDF5 → GRPO JSONL
 │   │   ├── convert_to_sft.py         # convert GRPO-format data → SFT format
 │   │   ├── prepare_fullstate_data.py # convert incremental data → full-state format
 │   │   └── sample_val.py             # sample a small validation subset
@@ -104,6 +107,68 @@ python scripts/train/prepare_data.py --data data/raw/test.json  --output data/te
 Point training/inference at the split audio with `--audio-base-dir data/audio/<split>`.
 
 Full-state baseline data is auto-generated from the incremental data by the training scripts.
+
+### Additional datasets
+
+All data-prep scripts produce the same GRPO JSONL schema (`messages` /
+`audios` / `solution` / `belief_state` / `prev_belief_state`), so
+`train_sft.sh`, `train_grpo.sh`, `infer_oracle.sh` / `infer_predicted.sh`,
+and `eval.py` work unchanged for any dataset below — just point their data
+env vars (`GRPO_TRAIN_DATA` / `TRAIN_DATA` / `VAL_DATA` / `AUDIO_BASE_DIR` /
+`OUTPUT_DIR` / `WANDB_PROJECT`) at the dataset's directory. Diff-op and
+JSONL-building logic shared across datasets lives in
+`scripts/train/dst_common.py`.
+
+| Dataset | Status | Prep scripts |
+|---|---|---|
+| SpokenWOZ | in use | `split_audio.py`, `prepare_data.py` |
+| [DSTC-11 Speech Aware Track](https://aclanthology.org/2023.dstc-1.25/) | download + file format confirmed directly from the [challenge's index page](https://storage.googleapis.com/gresearch/dstc11/dstc11_20221102a.html) (not yet run against the actual downloaded archives) | `split_audio_dstc11.py`, `prepare_data_dstc11.py` |
+
+SpokenTOD ([arXiv:2603.16783](https://arxiv.org/html/2603.16783)) and
+RealTalk-CN were considered but dropped: SpokenTOD's supposed Hugging Face
+listing (`standardwish/SpokenTOD`) returns 404 (not actually public), and
+RealTalk-CN is Chinese-only, out of scope for this project.
+
+#### DSTC-11 Speech Aware Track
+
+Re-releases MultiWOZ 2.1 dialogues with spoken user turns. Download and
+file format are confirmed directly from the [challenge's index
+page](https://storage.googleapis.com/gresearch/dstc11/dstc11_20221102a.html)
+(fetched and inspected directly — not taken from a search-engine summary):
+
+- **train** has TTS-verbatim audio only (4 synthetic speakers: `tpa`/`tpb`/`tpc`/`tpd` subdirectories, each containing all 8434 training dialogues) — no human speech for train.
+- **dev**/**test** additionally ship `human-verbatim` and `human-paraphrased` audio. Their zips have **no speaker subdirectory** — `.hd5` files sit directly under a single top-level folder (e.g. `dev-dstc11.tts-verbatim/mul0012.hd5`), unlike train's per-speaker layout.
+- A separate **mapping `.txt` file** per split gives the system/user turn text (`line_nr: N dialog_id: X.json turn_id: K text: user|agent: ...`); it has no audio itself.
+- A separate **gold `.json` file** per split (dev/test only — train has no gold file) gives the belief state: `{"pmul1635": [{"hotel": {"area": "east", ...}}, ...], ...}`, one already-flat state per user turn.
+- Audio is **not** one WAV per dialogue like SpokenWOZ — each zip contains one **HDF5 file per dialogue** (e.g. `mul0012.hd5`), with one group per *user* turn (system turns have no audio) keyed by a string like `"tpe_line_nr: 2409 dialog_id: mul0012.json turn_id: 1"`, containing raw int16 PCM at 16 kHz (`audio`, e.g. shape `(60506,)`), a `(T, 512)` float32 speech-encoder feature (`feat`, unused here), and an ASR hypothesis (`hyp` attr, e.g. `" ⁇ noise> information on a hotel that includes free parking pleas"` — real ASR output, artifacts included) used as the transcript-history text.
+
+**Verified against the real files** (2026-07-05): downloaded the dev
+mapping `.txt` and gold `.json` in full (all 1000 dev dialogues → 6374
+samples, zero failures) and one real per-dialogue `.hd5`
+(`mul0012.hd5`, fetched via an HTTP Range request against the zip's
+central directory so only ~2 MB transferred instead of the full 1.4 GB
+archive — useful if disk space is tight). `prepare_data_dstc11.py` and
+`split_audio_dstc11.py` both ran end-to-end against this real data and
+produced correct output (matching audio filenames, correct diff ops,
+correctly ordered history). The `CONFIG` constants in both scripts should
+not need further adjustment.
+
+```bash
+python scripts/train/split_audio_dstc11.py \
+    --h5-dir data/raw_dstc11/dev-dstc11.human-verbatim.2022-09-29 \
+    --output-dir data/audio_dstc11/human_verbatim/dev
+
+python scripts/train/prepare_data_dstc11.py \
+    --gold data/raw_dstc11/dev-dstc11.2022-1102.gold.json \
+    --mapping data/raw_dstc11/dev-dstc11.2022-07-27.txt \
+    --h5-dir data/raw_dstc11/dev-dstc11.human-verbatim.2022-09-29 \
+    --variant human_verbatim \
+    --output data/dstc11/val.jsonl
+
+GRPO_TRAIN_DATA=data/dstc11/train.jsonl GRPO_VAL_DATA=data/dstc11/val.jsonl \
+OUTPUT_DIR=output/sft_dstc11 WANDB_PROJECT=qwenomni-sft-dstc11 \
+bash scripts/train/train_sft.sh
+```
 
 ## Training
 

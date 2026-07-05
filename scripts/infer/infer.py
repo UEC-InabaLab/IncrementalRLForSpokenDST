@@ -480,10 +480,10 @@ def run_predicted(
         round_samples = [dialogues[did][round_idx] for did in round_dids]
 
         # System text (and, for the dialogue's opening turn, the first user
-        # utterance) is always ground truth — in production it's known
-        # text, never transcribed — so it's injected directly here rather
-        # than relying on the model to have reproduced it in a prior
-        # round's <transcript> output.
+        # utterance) is always ground truth — in production it's known text,
+        # never transcribed — so it's injected directly here rather than
+        # relying on the model to have reproduced it in a prior round's
+        # <transcript> output.
         for sample, did in zip(round_samples, round_dids):
             if not pred_history[did]:
                 pred_history[did].append(f"User: {sample['opening_user_text']}")

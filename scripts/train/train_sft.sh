@@ -9,6 +9,10 @@ set -euo pipefail
 # Configuration (override via environment variables)
 # ---------------------------------------------------------------------------
 MODEL_PATH="${MODEL_PATH:-Qwen/Qwen2.5-Omni-7B}"
+# Source GRPO-format JSONL to convert from (set these when training on a
+# dataset other than SpokenWOZ, e.g. GRPO_TRAIN_DATA=data/dstc11/train.jsonl)
+GRPO_TRAIN_DATA="${GRPO_TRAIN_DATA:-data/train.jsonl}"
+GRPO_VAL_DATA="${GRPO_VAL_DATA:-data/val.jsonl}"
 TRAIN_DATA="${TRAIN_DATA:-data/sft_train.jsonl}"
 VAL_DATA="${VAL_DATA:-data/sft_val.jsonl}"
 OUTPUT_DIR="${OUTPUT_DIR:-output/sft_incremental_dst}"
@@ -36,14 +40,14 @@ LOG_FILE="logs/sft_${TIMESTAMP}.log"
 if [ ! -f "${TRAIN_DATA}" ]; then
     echo "[INFO] Converting training data to SFT format..."
     uv run python scripts/train/convert_to_sft.py \
-        --input data/train.jsonl \
+        --input "${GRPO_TRAIN_DATA}" \
         --output "${TRAIN_DATA}"
 fi
 
 if [ ! -f "${VAL_DATA}" ]; then
     echo "[INFO] Converting validation data to SFT format..."
     uv run python scripts/train/convert_to_sft.py \
-        --input data/val.jsonl \
+        --input "${GRPO_VAL_DATA}" \
         --output "${VAL_DATA}"
 fi
 

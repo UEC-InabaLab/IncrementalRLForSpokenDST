@@ -25,6 +25,7 @@ dependencies = [
     "qwen-omni-utils",
     "decord>=0.6.0",
     "ms-swift>=3.12.4",
+    "h5py>=3.12.0",
 ]
 
 

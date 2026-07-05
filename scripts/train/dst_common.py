@@ -88,12 +88,17 @@ def build_user_message(history_lines: list[str], prev_state: dict) -> str:
     return "\n".join(parts)
 
 
-def build_solution(sys_text: str, user_text: str, prev: dict, curr: dict) -> str:
-    """Build gold solution string."""
+def build_solution(user_text: str, prev: dict, curr: dict) -> str:
+    """Build gold solution string.
+
+    The transcript covers the user turn only: the system turn is already
+    given to the model as plain text (in [Dialogue History]), so there is
+    nothing to transcribe there — in production the system's own text is
+    always known without ASR.
+    """
     ops = compute_diff_ops(prev, curr)
     answer = "\n".join(ops)
-    transcript = f"System: {sys_text}\nUser: {user_text}"
-    return f"<transcript>\n{transcript}\n</transcript>\n<answer>{answer}</answer>"
+    return f"<transcript>\nUser: {user_text}\n</transcript>\n<answer>{answer}</answer>"
 
 
 def load_system_prompt(default_path: Path, override: str | None = None) -> str:

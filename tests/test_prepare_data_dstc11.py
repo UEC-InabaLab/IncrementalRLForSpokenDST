@@ -47,6 +47,12 @@ def test_process_dialogue_builds_one_sample_per_turn():
     assert sample["belief_state"] == '{"hotel": {"area": "east", "stars": "4", "parking": "yes"}}'
     assert "set(hotel.parking=yes)" in sample["solution"]
     assert "User: i need a hotel in the east" in sample["messages"][1]["content"]
+    assert sample["sys_text"] == "what price range?"
+    assert sample["opening_user_text"] == "i need a hotel in the east"
+    # System text is given as plain-text input already; the gold transcript
+    # should not ask the model to "transcribe" it too.
+    assert "<transcript>\nUser: gimme free parking too\n</transcript>" in sample["solution"]
+    assert "System:" not in sample["solution"]
 
 
 def test_process_dialogue_missing_opening_user_hyp_skips():

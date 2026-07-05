@@ -70,10 +70,16 @@ def test_build_user_message_omits_empty_history():
 
 def test_build_solution_contains_transcript_and_diff():
     solution = build_solution(
-        "any preference",
         "cheap please",
         {},
         {"restaurant": {"pricerange": "cheap"}},
     )
-    assert "<transcript>\nSystem: any preference\nUser: cheap please\n</transcript>" in solution
+    assert "<transcript>\nUser: cheap please\n</transcript>" in solution
     assert "<answer>set(restaurant.pricerange=cheap)</answer>" in solution
+
+
+def test_build_solution_transcript_excludes_system_text():
+    """System text is already given as plain-text input, so the gold
+    transcript covers only the user turn — not something to transcribe."""
+    solution = build_solution("cheap please", {}, {})
+    assert "System:" not in solution

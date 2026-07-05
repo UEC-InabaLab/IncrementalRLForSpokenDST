@@ -38,6 +38,11 @@ Turn indexing mirrors SpokenWOZ/dst_common: for k = 0, 1, 2, ...
 The dialogue's opening user turn (turn_id=1) seeds the first history line,
 using its own "hyp" if available.
 
+Each sample also carries "sys_text" (this turn's system text) and
+"opening_user_text" (the dialogue's turn_id=1 user text) verbatim, so that
+infer.py's predicted (cascading) mode can inject them as ground truth
+directly instead of depending on the model to reproduce them.
+
 Usage:
   python scripts/train/prepare_data_dstc11.py \\
       --gold data/raw_dstc11/dev-dstc11.2022-1102.gold.json \\
@@ -127,7 +132,8 @@ def process_dialogue(
         return []
 
     samples: list[dict] = []
-    history_lines: list[str] = [f"User: {user_hyps[1]}"]
+    opening_user_text = user_hyps[1]
+    history_lines: list[str] = [f"User: {opening_user_text}"]
 
     for k, prev_state in enumerate(gold_states):
         sys_turn_id = 2 * k + 2
@@ -148,12 +154,14 @@ def process_dialogue(
                 {"role": "user", "content": build_user_message(history_with_sys, prev_state)},
             ],
             "audios": [f"{dialogue_id}_{user_turn_id}.wav"],
-            "solution": build_solution(sys_text, user_text, prev_state, curr_state),
+            "solution": build_solution(user_text, prev_state, curr_state),
             "belief_state": json.dumps(curr_state, ensure_ascii=False),
             "prev_belief_state": json.dumps(prev_state, ensure_ascii=False),
             "dialogue_id": dialogue_id,
             "turn_idx": k,
             "variant": variant,
+            "sys_text": sys_text,
+            "opening_user_text": opening_user_text,
         })
 
         history_lines.append(f"System: {sys_text}")

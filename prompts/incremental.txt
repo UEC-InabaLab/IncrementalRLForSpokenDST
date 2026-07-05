@@ -16,7 +16,6 @@ Slot change format (one per line):
 
 Example output:
 <transcript>
-System: do you have a price preference .
 User: i'd like something cheap .
 </transcript>
 <answer>set(restaurant.pricerange=cheap)</answer>

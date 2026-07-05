@@ -439,9 +439,12 @@ def run_predicted(
 ) -> list[dict[str, Any]]:
     """Run inference using model-predicted history (cascading evaluation).
 
-    Processes each dialogue turn by turn. After each round, the model's
-    predicted transcript and diff operations are used to build the
-    dialogue history and belief state for the next turn.
+    Processes each dialogue turn by turn. System turns (always ground
+    truth — known text, never transcribed) are injected directly from each
+    sample's "sys_text"/"opening_user_text" fields; only the *user* turn
+    history is cascaded from the model's own predicted transcript, since
+    that's the only part actually inferred from audio. Belief state is
+    likewise cascaded from the model's predicted diff operations.
     Turns at the same position across dialogues are batched together.
     """
     print("[INFO] Mode: predicted (model-predicted history)")
@@ -476,6 +479,16 @@ def run_predicted(
         ]
         round_samples = [dialogues[did][round_idx] for did in round_dids]
 
+        # System text (and, for the dialogue's opening turn, the first user
+        # utterance) is always ground truth — in production it's known text,
+        # never transcribed — so it's injected directly here rather than
+        # relying on the model to have reproduced it in a prior round's
+        # <transcript> output.
+        for sample, did in zip(round_samples, round_dids):
+            if not pred_history[did]:
+                pred_history[did].append(f"User: {sample['opening_user_text']}")
+            pred_history[did].append(f"System: {sample['sys_text']}")
+
         # Build messages with predicted history/state
         round_messages = []
         for sample, did in zip(round_samples, round_dids):
@@ -504,7 +517,10 @@ def run_predicted(
             # Record the state that was fed to the model BEFORE updating
             input_state_str = json.dumps(pred_state[did], ensure_ascii=False)
 
-            # Update dialogue history with predicted transcript
+            # Update dialogue history with the model's own predicted user
+            # transcript (the actually-cascaded, uncertain part — the
+            # system line for this round was already appended above from
+            # ground truth before inference ran).
             transcript = _extract_transcript(prediction)
             if transcript:
                 for line in transcript.strip().split("\n"):

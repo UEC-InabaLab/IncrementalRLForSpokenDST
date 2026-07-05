@@ -42,6 +42,11 @@ Audio files must be pre-extracted with split_audio.py. Each sample references:
 
 At inference, set --audio-base-dir to the audio output directory.
 
+Each sample also carries "sys_text" (this turn's system text) and
+"opening_user_text" (the dialogue's log[0] user text) verbatim, so that
+infer.py's predicted (cascading) mode can inject them as ground truth
+directly instead of depending on the model to reproduce them.
+
 Usage:
   # 1. Split audio first (see split_audio.py)
   # 2. Then prepare JSONL:
@@ -86,7 +91,8 @@ def process_dialogue(
     samples: list[dict] = []
 
     # log[0] is always a user turn; it goes directly into history
-    history_lines: list[str] = [f"User: {log[0]['text'].strip()}"]
+    opening_user_text = log[0]["text"].strip()
+    history_lines: list[str] = [f"User: {opening_user_text}"]
 
     k = 0
     while True:
@@ -123,11 +129,13 @@ def process_dialogue(
                 {"role": "user", "content": build_user_message(history_with_sys, prev_state)},
             ],
             "audios": [f"{dialogue_id}_{sys_idx}_{user_idx}.wav"],
-            "solution": build_solution(sys_text, user_text, prev_state, curr_state),
+            "solution": build_solution(user_text, prev_state, curr_state),
             "belief_state": json.dumps(curr_state, ensure_ascii=False),
             "prev_belief_state": json.dumps(prev_state, ensure_ascii=False),
             "dialogue_id": dialogue_id,
             "turn_idx": k,
+            "sys_text": sys_text,
+            "opening_user_text": opening_user_text,
         })
 
         history_lines.append(f"System: {sys_text}")

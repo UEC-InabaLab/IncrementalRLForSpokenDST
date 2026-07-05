@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Incremental DST - SFT Training with ms-swift
-# Model: Qwen2.5-Omni-7B
+#
+# Default model: Qwen2.5-Omni-7B. Also works for any other audio-capable model
+# registered in ms-swift by overriding MODEL_PATH — e.g. MiniCPM-o:
+#
+#   MODEL_PATH=OpenBMB/MiniCPM-o-2_6 \
+#   FREEZE_ALIGNER=false \
+#   OUTPUT_DIR=output/sft_minicpmo WANDB_PROJECT=minicpmo-sft \
+#   bash scripts/train/train_sft.sh
+#
+# The freeze flags below are Qwen-Omni's arg names but are shared ms-swift
+# multimodal args; adjust FREEZE_VIT/FREEZE_ALIGNER per model if needed.
+# Models registered outside ms-swift (Audio Flamingo 3, Kimi-Audio) do NOT
+# use this script — see scripts/train/audio_flamingo3/ and kimi_audio/.
 # =============================================================================
 set -euo pipefail
 
@@ -26,6 +38,12 @@ LORA_RANK="${LORA_RANK:-64}"
 LORA_ALPHA="${LORA_ALPHA:-128}"
 MAX_LENGTH="${MAX_LENGTH:-4096}"
 WANDB_PROJECT="${WANDB_PROJECT:-qwenomni-sft}"
+
+# Multimodal freeze flags (Qwen-Omni arg names; shared across ms-swift MLLMs).
+# Override per model — e.g. some models name/behave their aligner differently.
+FREEZE_VIT="${FREEZE_VIT:-true}"
+FREEZE_ALIGNER="${FREEZE_ALIGNER:-true}"
+ATTN_IMPL="${ATTN_IMPL:-flash_attn}"
 
 # ---------------------------------------------------------------------------
 # Logging setup
@@ -93,9 +111,9 @@ nohup uv run torchrun --nproc_per_node=${NUM_GPUS} \
     --logging_steps 10 \
     --report_to wandb \
     --output_dir "${OUTPUT_DIR}" \
-    --freeze_vit true \
-    --freeze_aligner true \
-    --attn_impl flash_attn \
+    --freeze_vit ${FREEZE_VIT} \
+    --freeze_aligner ${FREEZE_ALIGNER} \
+    --attn_impl ${ATTN_IMPL} \
     --deepspeed zero2 \
     --gradient_checkpointing true \
     > "${LOG_FILE}" 2>&1 &

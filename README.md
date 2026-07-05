@@ -46,17 +46,23 @@ Evaluated on [SpokenWOZ](https://github.com/ZekangLi/SpokenWOZ).
 │   │   ├── prepare_data_dstc11.py    # convert DSTC-11 gold state + HDF5 → GRPO JSONL
 │   │   ├── convert_to_sft.py         # convert GRPO-format data → SFT format
 │   │   ├── prepare_fullstate_data.py # convert incremental data → full-state format
-│   │   └── sample_val.py             # sample a small validation subset
+│   │   ├── sample_val.py             # sample a small validation subset
+│   │   ├── audio_flamingo3/          # Audio Flamingo 3 (non-ms-swift): data adapter, SFT, GRPO
+│   │   └── kimi_audio/               # Kimi-Audio (non-ms-swift): data converter, SFT wrapper
 │   ├── infer/
-│   │   ├── infer.py / infer_fullstate.py         # vLLM batch inference
+│   │   ├── infer.py / infer_fullstate.py         # vLLM batch inference (Qwen2.5-Omni, MiniCPM-o)
 │   │   ├── infer_oracle.sh / infer_predicted.sh  # oracle / cascading inference
-│   │   └── infer_fullstate_oracle.sh / infer_fullstate_predicted.sh
+│   │   ├── infer_fullstate_oracle.sh / infer_fullstate_predicted.sh
+│   │   ├── audio_flamingo3/infer.py              # Audio Flamingo 3 inference
+│   │   └── kimi_audio/infer.py                   # Kimi-Audio inference
 │   └── eval/
 │       ├── eval.py            # compute WER / JGA / Slot F1 (incremental)
 │       ├── eval_fullstate.py  # compute WER / JGA / Slot F1 (full-state)
 │       └── plot_jga_by_turn.py
 ├── src/
-│   └── reward.py   # ms-swift ORM plugin: GRPO reward functions
+│   └── reward.py   # ms-swift ORM plugin: GRPO reward functions (also usable standalone)
+├── docs/
+│   └── multi-model-support-plan.md  # plan/status for the additional models
 ├── tests/
 └── pyproject.toml
 ```
@@ -70,6 +76,60 @@ uv sync
 ```
 
 GPU-specific packages (`flash-attn`, `vllm`, etc.) are listed in `pyproject.toml` and resolved by `uv sync` for the target environment.
+
+## Models
+
+The same task, data, reward, and evaluation are shared across models; only the
+training/inference glue differs. See
+[`docs/multi-model-support-plan.md`](docs/multi-model-support-plan.md) for the
+full rationale and per-model status.
+
+| Model | Training path | Status |
+|---|---|---|
+| **Qwen2.5-Omni-7B** (default) | ms-swift SFT + GRPO (`scripts/train/train_sft.sh`, `train_grpo.sh`) | in use |
+| **MiniCPM-o** (2.6 / 4.5) | same ms-swift scripts via `MODEL_PATH` override | drop-in; smoke-test the chat-template/data fit first |
+| **Audio Flamingo 3** | custom HF `Trainer`+PEFT LoRA (`scripts/train/audio_flamingo3/`) | scripts written, **not yet run** (needs GPU+weights) |
+| **Kimi-Audio** | MoonshotAI's official `finetune_codes/` via a wrapper (`scripts/train/kimi_audio/`) | scripts written, **not yet run**; GRPO deferred |
+
+All models consume the **same GRPO-format JSONL** produced by
+`scripts/train/prepare_data*.py`; each model's scripts convert that JSONL into
+the chat format its processor expects (`audio_flamingo3/af3_data.py`,
+`kimi_audio/convert_to_kimia_format.py`). All models write a predictions JSONL
+that `scripts/eval/eval.py` scores identically.
+
+### MiniCPM-o (ms-swift path)
+
+```bash
+MODEL_PATH=OpenBMB/MiniCPM-o-2_6 \
+FREEZE_ALIGNER=false \
+GRPO_TRAIN_DATA=data/dstc11/train.jsonl GRPO_VAL_DATA=data/dstc11/val.jsonl \
+OUTPUT_DIR=output/sft_minicpmo WANDB_PROJECT=minicpmo-sft \
+bash scripts/train/train_sft.sh
+```
+
+Inference reuses `scripts/infer/infer_oracle.sh` with the same `MODEL_PATH`.
+
+### Audio Flamingo 3 and Kimi-Audio (standalone paths)
+
+These models are **not** registered in ms-swift, so they use their own scripts
+under `scripts/train/audio_flamingo3/` and `scripts/train/kimi_audio/`. Because
+each pins a different, mutually incompatible `transformers` version, give each
+its own environment rather than adding them to the root `pyproject.toml`:
+
+- **Qwen2.5-Omni-7B + MiniCPM-o**: the root env (`transformers>=4.50`; note
+  MiniCPM-o-4.5 wants exactly `4.51.3`).
+- **Audio Flamingo 3**: a separate env with a `transformers` release that
+  includes `AudioFlamingo3ForConditionalGeneration` (v4.57+/v5.x) plus `peft`,
+  `datasets`, `trl` (for the GRPO spike).
+- **Kimi-Audio**: a separate env following
+  [MoonshotAI/Kimi-Audio](https://github.com/MoonshotAI/Kimi-Audio)'s
+  `requirements.txt` (needs `transformers` **< 4.52.4**, see their issue #109),
+  plus a local clone of that repo for `finetune_codes/`.
+
+The training/inference scripts for these two are written against the documented
+APIs but have not been run end-to-end in this repo — smoke-test on a handful of
+real samples before a full run. Details and open questions are in
+[`docs/multi-model-support-plan.md`](docs/multi-model-support-plan.md).
 
 ## Data
 

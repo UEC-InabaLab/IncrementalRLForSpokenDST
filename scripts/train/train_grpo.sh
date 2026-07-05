@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Incremental DST - GRPO Training with ms-swift
-# Model: Qwen2.5-Omni-7B (optionally starting from SFT checkpoint)
+#
+# Default model: Qwen2.5-Omni-7B (optionally starting from an SFT checkpoint).
+# Also works for any other audio-capable model registered in ms-swift by
+# overriding MODEL_PATH (e.g. OpenBMB/MiniCPM-o-2_6; adjust FREEZE_ALIGNER if
+# needed). Models not registered in ms-swift (Audio Flamingo 3, Kimi-Audio)
+# do NOT use this script — see scripts/train/audio_flamingo3/ and kimi_audio/.
 # =============================================================================
 set -euo pipefail
 
@@ -35,6 +40,11 @@ TEMPERATURE="${TEMPERATURE:-1.0}"
 BETA="${BETA:-0.02}"
 NUM_ITERATIONS="${NUM_ITERATIONS:-2}"
 WANDB_PROJECT="${WANDB_PROJECT:-qwenomni-grpo}"
+
+# Multimodal freeze flags (Qwen-Omni arg names; shared across ms-swift MLLMs).
+FREEZE_VIT="${FREEZE_VIT:-true}"
+FREEZE_ALIGNER="${FREEZE_ALIGNER:-true}"
+ATTN_IMPL="${ATTN_IMPL:-flash_attn}"
 # Set RESUME_CHECKPOINT to resume training from a checkpoint
 # e.g., RESUME_CHECKPOINT=output/grpo_incremental_dst/v8-20260213-162756/checkpoint-4900
 RESUME_CHECKPOINT="${RESUME_CHECKPOINT:-}"
@@ -117,9 +127,9 @@ nohup uv run torchrun --nproc_per_node=${NUM_TRAIN_GPUS} \
     --logging_steps 5 \
     --report_to wandb \
     --output_dir "${OUTPUT_DIR}" \
-    --freeze_vit true \
-    --freeze_aligner true \
-    --attn_impl flash_attn \
+    --freeze_vit ${FREEZE_VIT} \
+    --freeze_aligner ${FREEZE_ALIGNER} \
+    --attn_impl ${ATTN_IMPL} \
     --use_vllm false \
     --deepspeed zero2 \
     --gradient_checkpointing true \

@@ -45,7 +45,6 @@ Evaluated on [SpokenWOZ](https://github.com/ZekangLi/SpokenWOZ).
 │   │   ├── prepare_data.py           # convert SpokenWOZ raw data → GRPO JSONL
 │   │   ├── split_audio_dstc11.py     # extract per-turn user audio from DSTC-11 HDF5 files
 │   │   ├── prepare_data_dstc11.py    # convert DSTC-11 gold state + HDF5 → GRPO JSONL
-│   │   ├── prepare_data_spokentod.py    # convert SpokenTOD raw data → GRPO JSONL (speculative, see Data section)
 │   │   ├── convert_to_sft.py         # convert GRPO-format data → SFT format
 │   │   ├── prepare_fullstate_data.py # convert incremental data → full-state format
 │   │   └── sample_val.py             # sample a small validation subset
@@ -125,7 +124,11 @@ JSONL-building logic shared across datasets lives in
 |---|---|---|
 | SpokenWOZ | in use | `split_audio.py`, `prepare_data.py` |
 | [DSTC-11 Speech Aware Track](https://aclanthology.org/2023.dstc-1.25/) | download confirmed (see below); HDF5 group-key/attr names not yet verified against the real archives | `split_audio_dstc11.py`, `prepare_data_dstc11.py` |
-| SpokenTOD ([arXiv:2603.16783](https://arxiv.org/html/2603.16783)) | released on [Hugging Face](https://huggingface.co/datasets/standardwish/SpokenTOD) (gated — requires HF login); schema not yet inspected | `prepare_data_spokentod.py` |
+
+SpokenTOD ([arXiv:2603.16783](https://arxiv.org/html/2603.16783)) and
+RealTalk-CN were considered but dropped: SpokenTOD's supposed Hugging Face
+listing (`standardwish/SpokenTOD`) returns 404 (not actually public), and
+RealTalk-CN is Chinese-only, out of scope for this project.
 
 #### DSTC-11 Speech Aware Track
 
@@ -157,27 +160,6 @@ python scripts/train/prepare_data_dstc11.py \
 GRPO_TRAIN_DATA=data/dstc11/train.jsonl GRPO_VAL_DATA=data/dstc11/val.jsonl \
 OUTPUT_DIR=output/sft_dstc11 WANDB_PROJECT=qwenomni-sft-dstc11 \
 bash scripts/train/train_sft.sh
-```
-
-#### SpokenTOD
-
-A real, released dataset, but its Hugging Face page/API requires an
-authenticated, terms-accepted session (unauthenticated fetches return 401),
-so its exact schema hasn't been inspected here. `prepare_data_spokentod.py`
-is a scaffold based on the paper's description (flat per-turn domain/slot
-state rather than MultiWOZ's nested ontology), with all assumed field names
-collected in a `CONFIG` block at the top of the file. After logging into
-Hugging Face and downloading (`huggingface-cli download
-standardwish/SpokenTOD`):
-
-1. Inspect a sample dialogue and update the `CONFIG` constants (speaker
-   tags, state nesting, audio filename key) to match.
-2. If audio ships one-file-per-dialogue rather than pre-split per turn, add
-   a `split_audio_spokentod.py` analogous to `split_audio_dstc11.py`.
-
-```bash
-python scripts/train/prepare_data_spokentod.py \
-    --data data/raw_spokentod/train.json --output data/spokentod/train.jsonl
 ```
 
 ## Training

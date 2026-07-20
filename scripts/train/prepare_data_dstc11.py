@@ -44,12 +44,16 @@ infer.py's predicted (cascading) mode can inject them as ground truth
 directly instead of depending on the model to reproduce them.
 
 Usage:
+  # --audio-base-dir bakes in absolute audio paths, since training scripts
+  # (unlike infer.py) have no --audio-base-dir of their own to resolve bare
+  # filenames at load time:
   python scripts/train/prepare_data_dstc11.py \\
       --gold data/raw_dstc11/dev-dstc11.2022-1102.gold.json \\
       --mapping data/raw_dstc11/dev-dstc11.2022-07-27.txt \\
       --h5-dir data/raw_dstc11/dev-dstc11.human-verbatim.2022-09-29 \\
       --variant human_verbatim \\
-      --output data/dstc11/val.jsonl
+      --output data/dstc11/val.jsonl \\
+      --audio-base-dir data/audio_dstc11/human_verbatim/dev
 """
 
 import argparse
@@ -127,6 +131,7 @@ def process_dialogue(
     user_hyps: dict[int, str],
     system_prompt: str,
     variant: str,
+    audio_base_dir: str | None = None,
 ) -> list[dict]:
     if not gold_states or 1 not in user_hyps:
         return []
@@ -148,12 +153,15 @@ def process_dialogue(
 
         history_with_sys = list(history_lines) + [f"System: {sys_text}"]
 
+        audio_filename = f"{dialogue_id}_{user_turn_id}.wav"
+        audio_path = str(Path(audio_base_dir) / audio_filename) if audio_base_dir else audio_filename
+
         samples.append({
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": build_user_message(history_with_sys, prev_state)},
             ],
-            "audios": [f"{dialogue_id}_{user_turn_id}.wav"],
+            "audios": [audio_path],
             "solution": build_solution(user_text, prev_state, curr_state),
             "belief_state": json.dumps(curr_state, ensure_ascii=False),
             "prev_belief_state": json.dumps(prev_state, ensure_ascii=False),
@@ -178,9 +186,19 @@ def main() -> None:
     parser.add_argument("--variant", required=True, choices=VARIANTS)
     parser.add_argument("--output", required=True, help="Output JSONL path")
     parser.add_argument("--system-prompt", default=None, help="Override system prompt file")
+    parser.add_argument(
+        "--audio-base-dir",
+        default=None,
+        help=(
+            "Directory the split_audio_dstc11.py output for this split+variant lives in. If given, "
+            "audio paths are written as absolute paths so training scripts can resolve them regardless "
+            "of working directory. If omitted, bare filenames are written."
+        ),
+    )
     args = parser.parse_args()
 
     system_prompt = load_system_prompt(SYSTEM_PROMPT_PATH, args.system_prompt)
+    audio_base_dir = str(Path(args.audio_base_dir).resolve()) if args.audio_base_dir else None
 
     with open(args.gold, encoding="utf-8") as f:
         gold: dict = json.load(f)
@@ -199,6 +217,7 @@ def main() -> None:
             user_hyp_index.get(dialogue_id, {}),
             system_prompt,
             args.variant,
+            audio_base_dir,
         )
         if not result:
             skipped += 1

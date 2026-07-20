@@ -99,12 +99,16 @@ Then convert to GRPO JSONL format. Each sample carries the diff-operation target
 plus the previous state from the current system turn:
 
 ```bash
-python scripts/train/prepare_data.py --data data/raw/train.json --output data/train.jsonl
-python scripts/train/prepare_data.py --data data/raw/val.json   --output data/val.jsonl
-python scripts/train/prepare_data.py --data data/raw/test.json  --output data/test.jsonl
+python scripts/train/prepare_data.py --data data/raw/train.json --output data/train.jsonl --audio-base-dir data/audio/train
+python scripts/train/prepare_data.py --data data/raw/val.json   --output data/val.jsonl   --audio-base-dir data/audio/val
+python scripts/train/prepare_data.py --data data/raw/test.json  --output data/test.jsonl  --audio-base-dir data/audio/test
 ```
 
-Point training/inference at the split audio with `--audio-base-dir data/audio/<split>`.
+`--audio-base-dir` bakes each sample's audio path into an absolute path pointing at that split's
+`split_audio.py` output. This is required for training (`train_sft.sh` / `train_grpo.sh` have no
+audio-dir mechanism of their own and resolve `audios` paths relative to the process's working
+directory), and is also picked up automatically by `infer.py`'s own `--audio-base-dir` flag if you
+prefer to keep the JSONL portable and resolve paths at inference time instead.
 
 Full-state baseline data is auto-generated from the incremental data by the training scripts.
 

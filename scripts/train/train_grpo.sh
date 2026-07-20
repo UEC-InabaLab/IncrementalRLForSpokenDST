@@ -84,7 +84,7 @@ nohup uv run torchrun --nproc_per_node=${NUM_TRAIN_GPUS} \
     $(uv run python -c "import swift; print(swift.__path__[0])")/cli/rlhf.py \
     --rlhf_type grpo \
     ${MODEL_ARGS} \
-    --train_type lora \
+    --tuner_type lora \
     --quant_bits 4 \
     --bnb_4bit_compute_dtype bfloat16 \
     --bnb_4bit_quant_type nf4 \

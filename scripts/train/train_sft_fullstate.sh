@@ -75,7 +75,7 @@ echo "  Log:         ${LOG_FILE}"
 nohup uv run torchrun --nproc_per_node=${NUM_GPUS} \
     $(uv run python -c "import swift; print(swift.__path__[0])")/cli/sft.py \
     --model "${MODEL_PATH}" \
-    --train_type lora \
+    --tuner_type lora \
     --quant_bits 4 \
     --bnb_4bit_compute_dtype bfloat16 \
     --bnb_4bit_quant_type nf4 \

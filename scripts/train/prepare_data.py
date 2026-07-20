@@ -49,14 +49,18 @@ directly instead of depending on the model to reproduce them.
 
 Usage:
   # 1. Split audio first (see split_audio.py)
-  # 2. Then prepare JSONL:
+  # 2. Then prepare JSONL. --audio-base-dir bakes in absolute audio paths,
+  #    since training scripts (unlike infer.py) have no --audio-base-dir of
+  #    their own to resolve bare filenames at load time:
   python scripts/train/prepare_data.py \\
       --data      data/raw/train.json \\
-      --output    data/train.jsonl
+      --output    data/train.jsonl \\
+      --audio-base-dir data/audio/train
 
   python scripts/train/prepare_data.py \\
       --data      data/raw/test.json \\
-      --output    data/test.jsonl
+      --output    data/test.jsonl \\
+      --audio-base-dir data/audio/test
 """
 
 import argparse
@@ -79,6 +83,7 @@ def process_dialogue(
     dialogue_id: str,
     log: list[dict],
     system_prompt: str,
+    audio_base_dir: str | None = None,
 ) -> list[dict]:
     """Convert one dialogue into GRPO samples.
 
@@ -123,12 +128,15 @@ def process_dialogue(
         # History includes current system turn (text); audio is user turn only
         history_with_sys = list(history_lines) + [f"System: {sys_text}"]
 
+        audio_filename = f"{dialogue_id}_{sys_idx}_{user_idx}.wav"
+        audio_path = str(Path(audio_base_dir) / audio_filename) if audio_base_dir else audio_filename
+
         samples.append({
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": build_user_message(history_with_sys, prev_state)},
             ],
-            "audios": [f"{dialogue_id}_{sys_idx}_{user_idx}.wav"],
+            "audios": [audio_path],
             "solution": build_solution(user_text, prev_state, curr_state),
             "belief_state": json.dumps(curr_state, ensure_ascii=False),
             "prev_belief_state": json.dumps(prev_state, ensure_ascii=False),
@@ -150,9 +158,20 @@ def main() -> None:
     parser.add_argument("--data", required=True, help="SpokenWOZ JSON file")
     parser.add_argument("--output", required=True, help="Output JSONL path")
     parser.add_argument("--system-prompt", default=None, help="Override system prompt file")
+    parser.add_argument(
+        "--audio-base-dir",
+        default=None,
+        help=(
+            "Directory the split_audio.py output for this split lives in (e.g. data/audio/train). "
+            "If given, audio paths are written as absolute paths so training scripts (which have no "
+            "audio-dir mechanism of their own) can resolve them regardless of working directory. "
+            "If omitted, bare filenames are written (matching split_audio.py's output naming)."
+        ),
+    )
     args = parser.parse_args()
 
     system_prompt = load_system_prompt(SYSTEM_PROMPT_PATH, args.system_prompt)
+    audio_base_dir = str(Path(args.audio_base_dir).resolve()) if args.audio_base_dir else None
 
     with open(args.data, encoding="utf-8") as f:
         data: dict = json.load(f)
@@ -161,7 +180,7 @@ def main() -> None:
     skipped = 0
     for dialogue_id, dialogue in data.items():
         log = dialogue.get("log", [])
-        result = process_dialogue(dialogue_id, log, system_prompt)
+        result = process_dialogue(dialogue_id, log, system_prompt, audio_base_dir)
         if not result:
             skipped += 1
         samples.extend(result)
